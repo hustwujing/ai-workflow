@@ -478,14 +478,15 @@ def cmd_mr_merge(args: argparse.Namespace) -> None:
                     f"[错误] 分支落后 {target_branch}，需先同步再合并。\n\n"
                     f"  {target_branch} 上有以下提交你的分支尚未包含：\n"
                     f"{behind_preview}{more}\n\n"
-                    f"  执行以下命令同步后重试：\n"
+                    f"  执行以下命令同步后重试（rebase 后会自动 force push）：\n"
                     f"    git rebase origin/{target_branch}\n"
-                    f"    ccg gitlab mr create\n"
+                    f"    ccg gitlab mr create   # 会自动 force push，推送成功后直接执行下一步\n"
                     f"    ccg gitlab mr merge {mr_iid}\n\n"
                     f"  如 rebase 遇到冲突：\n"
                     f"    git status               # 查看冲突文件\n"
                     f"    git add <冲突文件>        # 解决后标记\n"
                     f"    git rebase --continue\n\n"
+                    f"  ⚠ 注意：rebase 后请勿执行 git pull，否则会拉回旧提交造成死循环\n\n"
                     f"  如有疑问请联系 {tl_label}",
                     file=sys.stderr,
                 )

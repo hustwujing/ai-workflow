@@ -109,6 +109,7 @@ def create_local_branch(branch_name: str) -> None:
 
 def push_current_branch() -> None:
     branch = get_current_branch()
+    is_feature_branch = bool(re.match(r"^(issue|hotfix)_", branch))
     print(f"[git] 推送分支 {branch} 到远端...")
     result = subprocess.run(
         ["git", "push", "-u", "origin", branch],
@@ -122,13 +123,35 @@ def push_current_branch() -> None:
     if result.returncode != 0:
         stderr = result.stderr or ""
         if "non-fast-forward" in stderr or "rejected" in stderr:
-            raise BranchError(
-                f"推送被拒绝：远端分支 {branch} 有本地不存在的提交。\n"
-                f"请先同步远端变更后重试：\n"
-                f"  git pull --rebase origin {branch}\n"
-                f"  ccg gitlab mr create"
-            )
-        raise BranchError(f"命令失败: git push -u origin {branch}\n{stderr}")
+            if is_feature_branch:
+                # rebase 后本地历史被重写，需要 force push；用 --force-with-lease 保证安全
+                print(f"[git] 检测到 rebase 后历史分叉，对功能分支执行 force push...")
+                force_result = subprocess.run(
+                    ["git", "push", "--force-with-lease", "-u", "origin", branch],
+                    capture_output=True,
+                    text=True,
+                )
+                if force_result.stdout:
+                    print(force_result.stdout, end="")
+                if force_result.stderr:
+                    print(force_result.stderr, end="", file=sys.stderr)
+                if force_result.returncode != 0:
+                    raise BranchError(
+                        f"force push 失败：{force_result.stderr.strip()}\n"
+                        f"可能是远端分支在你 fetch 后又有新提交，请重新执行：\n"
+                        f"  git fetch origin\n"
+                        f"  git rebase origin/<目标分支>\n"
+                        f"  ccg gitlab mr create"
+                    )
+            else:
+                raise BranchError(
+                    f"推送被拒绝：远端分支 {branch} 有本地不存在的提交。\n"
+                    f"请先同步远端变更后重试：\n"
+                    f"  git pull --rebase origin {branch}\n"
+                    f"  ccg gitlab mr create"
+                )
+        else:
+            raise BranchError(f"命令失败: git push -u origin {branch}\n{stderr}")
 
 
 def get_commits_behind(target_remote_branch: str) -> list[str]:
