@@ -68,9 +68,9 @@ def notify_feature_start(
         f"**下一步 · {developer}**\n"
         f"> 1. 当前已切换到分支 `{branch_name}`，直接开始开发\n"
         f"> 2. 每次提交代码执行（自动追加 Issue 编号）：\n"
-        f">    `cc gitlab commit \"具体改动说明\"`\n"
+        f">    `ccg gitlab commit \"具体改动说明\"`\n"
         f"> 3. 开发完成后推送分支并创建 MR：\n"
-        f">    `cc gitlab mr create`\n"
+        f">    `ccg gitlab mr create`\n"
     )
     send_webhook(webhook_url, content, at_userids=at_userids)
 
@@ -98,9 +98,9 @@ def notify_hotfix_start(
         f"**下一步 · {developer}**\n"
         f"> 1. 当前已切换到分支 `{branch_name}`，直接开始修复\n"
         f"> 2. 修复完成后提交代码（自动追加 Issue 编号）：\n"
-        f">    `cc gitlab commit \"修复说明\"`\n"
+        f">    `ccg gitlab commit \"修复说明\"`\n"
         f"> 3. 推送分支并创建 MR（直接合入 main）：\n"
-        f">    `cc gitlab mr create`\n"
+        f">    `ccg gitlab mr create`\n"
     )
     send_webhook(webhook_url, content, at_userids=at_userids)
 
@@ -135,9 +135,9 @@ def notify_mr_created(
         f"> 2. 在页面右侧点击「Approve」完成审批\n\n"
         f"**下一步 · {operator}（研发）**\n"
         f"> 1. 随时查看双门禁状态：\n"
-        f">    `cc gitlab mr check {mr_iid}`\n"
+        f">    `ccg gitlab mr check {mr_iid}`\n"
         f"> 2. 双门禁（产品验收 + 研发审批）均通过后执行合并：\n"
-        f">    `cc gitlab mr merge {mr_iid}`\n"
+        f">    `ccg gitlab mr merge {mr_iid}`\n"
     )
     send_webhook(webhook_url, content, at_userids=at_userids)
 
@@ -187,9 +187,9 @@ def notify_mr_updated(
         f"> 打开 [MR 页面]({mr_url}) 在右侧点击「Approve」\n\n"
         f"**下一步 · {operator}（研发）**\n"
         f"> 1. 随时查看双门禁状态：\n"
-        f">    `cc gitlab mr check {mr_iid}`\n"
+        f">    `ccg gitlab mr check {mr_iid}`\n"
         f"> 2. 双门禁（产品验收 + 研发审批）均通过后执行合并：\n"
-        f">    `cc gitlab mr merge {mr_iid}`\n"
+        f">    `ccg gitlab mr merge {mr_iid}`\n"
     )
     send_webhook(webhook_url, content, at_userids=at_userids)
 
@@ -214,7 +214,7 @@ def notify_mr_merged(
             f"**下一步 · {operator}**\n"
             f"> 1. 登录 `{pre_branch}` 环境，按 Issue #{issue_id} 验收标准逐项验证功能\n"
             f"> 2. 测试通过后创建上线 MR：\n"
-            f">    `cc gitlab mr release`\n"
+            f">    `ccg gitlab mr release`\n"
             f"> 3. 等待 {tl_label} 审批后执行合并命令上线\n"
         )
     else:
@@ -222,7 +222,7 @@ def notify_mr_merged(
             f"**下一步 · {operator}**\n"
             f"> 1. 确认线上 Issue #{issue_id} 问题已修复\n"
             f"> 2. 将热修代码同步到 `{pre_branch}` 保持环境对齐：\n"
-            f">    `cc gitlab mr sync-pre`\n"
+            f">    `ccg gitlab mr sync-pre`\n"
         )
 
     content = (
@@ -282,7 +282,7 @@ def notify_release(
         f"> 2. 确认无误后在页面右侧点击「Approve」完成审批\n\n"
         f"**下一步 · {operator}**\n"
         f"> {tl_label} 审批通过后，执行以下命令合并上线：\n"
-        f"> `cc gitlab mr merge {mr_iid}`\n"
+        f"> `ccg gitlab mr merge {mr_iid}`\n"
     )
     send_webhook(webhook_url, content, at_userids=at_userids)
 
@@ -311,6 +311,6 @@ def notify_sync_pre(
         f"> 2. 在页面右侧点击「Approve」完成审批\n\n"
         f"**下一步 · {operator}**\n"
         f"> {tl_label} 审批通过后，执行以下命令完成同步：\n"
-        f"> `cc gitlab mr merge {mr_iid}`\n"
+        f"> `ccg gitlab mr merge {mr_iid}`\n"
     )
     send_webhook(webhook_url, content, at_userids=at_userids)
