@@ -47,18 +47,16 @@ pip install -e ai-workflow/
 cc --help
 ```
 
-### 3. 配置 .env
+### 3. 配置环境变量
 
-`cc` 命令运行时会从**当前目录向上**查找 `.env` 文件。建议将 `.env` 放在你的项目仓库根目录，这样在项目内任何位置执行命令都能自动识别。
+`cc` 命令运行时会从**当前目录向上**查找配置文件，建议放在项目仓库根目录。配置分两个文件：
 
-```bash
-# 在你的项目仓库根目录下
-cp /path/to/ai-workflow/.env.example .env
-```
+| 文件 | 用途 | 是否提交 git |
+|------|------|-------------|
+| `.env` | 团队公共配置，由 TL/管理员维护 | ✅ 提交 |
+| `.env.local` | 个人私有配置，每人自己填写 | ❌ 不提交（已 gitignore） |
 
-`.env` 中的配置分两部分：
-
-**团队公共配置（由 TL/管理员统一填写后共享给团队）：**
+**第一步：将本仓库的 `.env` 复制到你的项目仓库根目录，填写团队配置（TL 操作一次，共享给全团队）：**
 
 ```ini
 GITLAB_URL=https://gitlab.xxx.com          # GitLab 地址
@@ -66,22 +64,22 @@ GITLAB_PROJECT_ID=123                       # 项目 ID（GitLab 项目页 URL �
 GITLAB_BRANCH_MAIN=main                     # 生产分支名
 GITLAB_BRANCH_PRE=pre                       # 预发/测试分支名
 WECHAT_WEBHOOK_URL=https://...             # 企业微信群机器人 Webhook
-WECHAT_AT_TL=138xxxx,139xxxx              # TL 手机号（多个逗号分隔）
-GITLAB_REVIEWER_USERNAMES=zhangsan,lisi    # Reviewer 的 GitLab 用户名
-WECHAT_USER_zhangsan=13900000001           # 全体成员手机号映射（每人一行，用于企微@）
+WECHAT_AT_TL=138xxxx,139xxxx              # Reviewer 手机号（多个逗号分隔）
+GITLAB_REVIEWER_USERNAMES=zhangsan,lisi    # Reviewer GitLab 用户名
+WECHAT_USER_zhangsan=13900000001           # 全体成员手机号映射（新成员入职时追加）
 WECHAT_USER_lisi=13900000002
-WECHAT_USER_wujing03=18800000003
-# ...每新增一名成员在此补充一行
 ```
 
-**个人配置（每位研发自己填写）：**
+**第二步：在项目仓库根目录创建 `.env.local`，填写个人配置（每位研发自己操作）：**
+
+```bash
+cp .env.local.example .env.local   # 或手动创建
+```
 
 ```ini
 GITLAB_PRIVATE_TOKEN=glpat-xxxxxxxxxxxx    # 个人 GitLab Token（见下方说明）
 GITLAB_USERNAME=wujing03                   # 自己的 GitLab 用户名
 ```
-
-> **注意：** `.env` 文件包含个人 Token，已加入 `.gitignore`，不会被提交到代码仓库。
 
 ### 4. 获取 GitLab Personal Access Token
 

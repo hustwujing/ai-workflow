@@ -4,22 +4,32 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 
+def _load_file(env_file: Path, override: bool = False) -> None:
+    with env_file.open(encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            key = key.strip()
+            val = val.strip()
+            if key and (override or key not in os.environ):
+                os.environ[key] = val
+
+
 def _load_dotenv() -> None:
-    """从当前目录向上查找 .env 文件并加载，已有的环境变量不覆盖。"""
+    """从当前目录向上查找 .env（团队公共）和 .env.local（个人私有）并加载。
+    .env.local 的值优先级更高，会覆盖 .env 中的同名项。
+    """
     path = Path.cwd()
     for directory in [path, *path.parents]:
-        env_file = directory / ".env"
-        if env_file.is_file():
-            with env_file.open(encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line or line.startswith("#") or "=" not in line:
-                        continue
-                    key, _, val = line.partition("=")
-                    key = key.strip()
-                    val = val.strip()
-                    if key and key not in os.environ:
-                        os.environ[key] = val
+        shared = directory / ".env"
+        local = directory / ".env.local"
+        if shared.is_file() or local.is_file():
+            if shared.is_file():
+                _load_file(shared, override=False)
+            if local.is_file():
+                _load_file(local, override=True)
             break
 
 
