@@ -1,4 +1,4 @@
-"""cc gitlab daily-report — 团队日报生成与发送。"""
+"""ccg gitlab daily-report — 团队日报生成与发送。"""
 from __future__ import annotations
 
 import argparse

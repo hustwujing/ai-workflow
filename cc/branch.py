@@ -126,7 +126,7 @@ def push_current_branch() -> None:
                 f"推送被拒绝：远端分支 {branch} 有本地不存在的提交。\n"
                 f"请先同步远端变更后重试：\n"
                 f"  git pull --rebase origin {branch}\n"
-                f"  cc gitlab mr create"
+                f"  ccg gitlab mr create"
             )
         raise BranchError(f"命令失败: git push -u origin {branch}\n{stderr}")
 

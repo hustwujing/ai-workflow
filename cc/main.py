@@ -228,7 +228,7 @@ def cmd_mr_create(args: argparse.Namespace) -> None:
                 "  4. 如需放弃 rebase 回到操作前状态：\n"
                 "       git rebase --abort\n"
                 "  5. rebase 完成后重新执行：\n"
-                "       cc gitlab mr create",
+                "       ccg gitlab mr create",
                 file=sys.stderr,
             )
         else:
@@ -429,7 +429,7 @@ def cmd_mr_check(args: argparse.Namespace) -> None:
     print(f"  研发 Approval 审批：      {dev_label}")
 
     if product_ok and dev_ok and not stale_dev:
-        print("\n[结论] 满足合并条件，可执行 cc gitlab mr merge。")
+        print("\n[结论] 满足合并条件，可执行 ccg gitlab mr merge。")
     elif product_ok and dev_ok and stale_dev:
         print("\n[结论] 门禁已通过，但审批后有新提交，建议 Reviewer 确认后再执行合并。")
     else:
@@ -480,8 +480,8 @@ def cmd_mr_merge(args: argparse.Namespace) -> None:
                     f"{behind_preview}{more}\n\n"
                     f"  执行以下命令同步后重试：\n"
                     f"    git rebase origin/{target_branch}\n"
-                    f"    cc gitlab mr create\n"
-                    f"    cc gitlab mr merge {mr_iid}\n\n"
+                    f"    ccg gitlab mr create\n"
+                    f"    ccg gitlab mr merge {mr_iid}\n\n"
                     f"  如 rebase 遇到冲突：\n"
                     f"    git status               # 查看冲突文件\n"
                     f"    git add <冲突文件>        # 解决后标记\n"
@@ -687,11 +687,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="platform")
 
-    # cc gitlab ...
+    # ccg gitlab ...
     gitlab_parser = sub.add_parser("gitlab", help="GitLab 相关命令")
     gitlab_sub = gitlab_parser.add_subparsers(dest="resource")
 
-    # cc gitlab feature ...
+    # ccg gitlab feature ...
     feature_parser = gitlab_sub.add_parser("feature", help="功能需求分支管理")
     feature_sub = feature_parser.add_subparsers(dest="action")
     feature_start = feature_sub.add_parser("start", help="拉取功能分支（自动校验需求 Issue）")
@@ -699,7 +699,7 @@ def _build_parser() -> argparse.ArgumentParser:
     feature_start.add_argument("--base", default=None, metavar="BRANCH", help="基准分支，默认为 main")
     feature_start.set_defaults(func=cmd_feature_start)
 
-    # cc gitlab hotfix ...
+    # ccg gitlab hotfix ...
     hotfix_parser = gitlab_sub.add_parser("hotfix", help="Bug 热修分支管理")
     hotfix_sub = hotfix_parser.add_subparsers(dest="action")
     hotfix_start = hotfix_sub.add_parser("start", help="拉取热修分支（自动校验 Bug Issue）")
@@ -707,12 +707,12 @@ def _build_parser() -> argparse.ArgumentParser:
     hotfix_start.add_argument("--base", default=None, metavar="BRANCH", help="基准分支，默认为 main")
     hotfix_start.set_defaults(func=cmd_hotfix_start)
 
-    # cc gitlab commit ...
+    # ccg gitlab commit ...
     commit_parser = gitlab_sub.add_parser("commit", help="规范提交代码")
     commit_parser.add_argument("message", help="提交说明")
     commit_parser.set_defaults(func=cmd_commit)
 
-    # cc gitlab mr ...
+    # ccg gitlab mr ...
     mr_parser = gitlab_sub.add_parser("mr", help="MR 管理")
     mr_sub = mr_parser.add_subparsers(dest="action")
 
@@ -733,7 +733,7 @@ def _build_parser() -> argparse.ArgumentParser:
     mr_sync_pre = mr_sub.add_parser("sync-pre", help="热修同步 main 到 pre")
     mr_sync_pre.set_defaults(func=cmd_mr_sync_pre)
 
-    # cc gitlab daily-report
+    # ccg gitlab daily-report
     daily_report_parser = gitlab_sub.add_parser("daily-report", help="生成并发送每日工作日报")
     daily_report_parser.add_argument(
         "--hours", type=int, default=24, metavar="N", help="统计过去 N 小时，默认 24"
