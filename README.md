@@ -47,6 +47,33 @@ pip install -e ai-workflow/
 cc --help
 ```
 
+> **⚠ 命令冲突说明：** macOS / Linux 系统上 `/usr/bin/cc` 是 C 编译器的系统别名，`pip install` 后可能仍被系统命令覆盖，导致 `cc` 执行的是编译器而非本工具。
+>
+> 先检查是否冲突：
+>
+> ```bash
+> which cc          # 若输出 /usr/bin/cc 则存在冲突，需要处理
+> cc --version      # 若输出 C 编译器版本而非工具帮助，则确认冲突
+> ```
+>
+> 如有冲突，在 `~/.zshrc`（zsh）或 `~/.bash_profile`（bash）末尾追加以下内容，让 pip 安装路径优先：
+>
+> ```bash
+> # 让 pip 安装的 cc 命令优先于系统 /usr/bin/cc
+> export PATH="$(python3 -m site --user-scripts):$PATH"
+> ```
+>
+> 或者直接写死 alias（更简单直接）：
+>
+> ```bash
+> # 将下方路径替换为 `pip show cc-gitlab` 中 Location 字段对应的 bin 目录下的 cc
+> alias cc='/usr/local/bin/cc'       # macOS Intel 常见路径
+> # alias cc='/opt/homebrew/bin/cc'  # macOS Apple Silicon 常见路径
+> # alias cc="$HOME/.local/bin/cc"   # Linux 常见路径
+> ```
+>
+> 追加后执行 `source ~/.zshrc`（或 `source ~/.bash_profile`）重新加载，再运行 `cc --help` 确认输出的是本工具帮助信息。
+
 ### 3. 配置环境变量
 
 `cc` 命令运行时会从**当前目录向上**查找配置文件，建议放在项目仓库根目录。配置分两个文件：
