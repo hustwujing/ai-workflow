@@ -43,6 +43,7 @@ class Config:
     branch_pre: str
     gitlab_username: str                   # 当前开发者的 GitLab 用户名
     wechat_webhook_url: str
+    wechat_daily_report_webhook_url: str   # 日报专用群 Webhook，未配置时回退到 wechat_webhook_url
     at_tl_list: list[str]                  # TL 的手机号列表（固定）
     gitlab_reviewer_usernames: list[str]   # GitLab reviewer 的用户名
     wechat_user_map: dict[str, str] = field(default_factory=dict)  # gitlab_username -> 手机号
@@ -103,6 +104,7 @@ def load_config() -> Config:
         branch_pre=optional("GITLAB_BRANCH_PRE", "pre"),
         gitlab_username=require("GITLAB_USERNAME"),
         wechat_webhook_url=optional("WECHAT_WEBHOOK_URL"),
+        wechat_daily_report_webhook_url=optional("WECHAT_DAILY_REPORT_WEBHOOK_URL") or optional("WECHAT_WEBHOOK_URL"),
         at_tl_list=at_tl_list,
         gitlab_reviewer_usernames=gitlab_reviewer_usernames,
         wechat_user_map=user_map,

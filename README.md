@@ -63,7 +63,8 @@ GITLAB_URL=https://gitlab.xxx.com          # GitLab 地址
 GITLAB_PROJECT_ID=123                       # 项目 ID（GitLab 项目页 URL 中的数字）
 GITLAB_BRANCH_MAIN=main                     # 生产分支名
 GITLAB_BRANCH_PRE=pre                       # 预发/测试分支名
-WECHAT_WEBHOOK_URL=https://...             # 企业微信群机器人 Webhook
+WECHAT_WEBHOOK_URL=https://...             # 研发工作流通知群 Webhook（MR 创建/合并/更新等）
+WECHAT_DAILY_REPORT_WEBHOOK_URL=https://... # 日报专用群 Webhook（建议单独建群@老板，不填则复用上方）
 WECHAT_AT_TL=138xxxx,139xxxx              # Reviewer 手机号（多个逗号分隔）
 GITLAB_REVIEWER_USERNAMES=zhangsan,lisi    # Reviewer GitLab 用户名
 WECHAT_USER_zhangsan=13900000001           # 全体成员手机号映射（新成员入职时追加）
@@ -823,6 +824,15 @@ LLM_MODEL=gpt-4o-mini                    # 默认值
 ```
 
 > 不配置 `LLM_API_KEY` 时，工具自动降级为内置格式化，无需任何外部依赖。
+
+### 日报发送群配置
+
+日报默认发送到 `WECHAT_WEBHOOK_URL` 指定的群（研发工作流通知群）。建议单独建一个群拉老板进来，配置独立 Webhook：
+
+```ini
+# 在 .env 中添加（不填则复用 WECHAT_WEBHOOK_URL）
+WECHAT_DAILY_REPORT_WEBHOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=yyy
+```
 
 ### 企业微信效果示例
 

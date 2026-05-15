@@ -331,5 +331,5 @@ def cmd_daily_report(args: argparse.Namespace) -> None:
         print("[daily-report] --dry-run 模式，不发送企微通知。")
         return
 
-    notify_daily_report(cfg.wechat_webhook_url, content)
+    notify_daily_report(cfg.wechat_daily_report_webhook_url, content)
     print("[daily-report] 日报已发送至企业微信。")
