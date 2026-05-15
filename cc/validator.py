@@ -1,10 +1,12 @@
 import re
 import sys
-from typing import Literal, Optional
+from typing import List, Literal, Optional
 
 
 class ValidationError(Exception):
-    pass
+    def __init__(self, message: str, missing: Optional[List[str]] = None):
+        super().__init__(message)
+        self.missing: List[str] = missing or []
 
 
 IssueType = Literal["feature", "bug"]
@@ -35,7 +37,8 @@ def validate_feature_issue(body: str) -> None:
     if missing:
         raise ValidationError(
             f"Issue格式不合规，请产品按标准模板补充完整后再开发\n"
-            f"缺少必填小节：{', '.join(missing)}"
+            f"缺少必填小节：{', '.join(missing)}",
+            missing=missing,
         )
 
 
@@ -44,5 +47,6 @@ def validate_bug_issue(body: str) -> None:
     if missing:
         raise ValidationError(
             f"Issue格式不合规，请产品按标准模板补充完整后再开发\n"
-            f"缺少必填小节：{', '.join(missing)}"
+            f"缺少必填小节：{', '.join(missing)}",
+            missing=missing,
         )

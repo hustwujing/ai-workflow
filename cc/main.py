@@ -33,6 +33,7 @@ from .daily_report import cmd_daily_report
 from .wechat import (
     notify_feature_start,
     notify_hotfix_start,
+    notify_issue_invalid,
     notify_mr_created,
     notify_mr_merged,
     notify_mr_updated,
@@ -75,6 +76,21 @@ def cmd_feature_start(args: argparse.Namespace) -> None:
         validate_feature_issue(body)
     except ValidationError as e:
         print(f"[错误] {e}", file=sys.stderr)
+        author = issue.get("author", {})
+        author_username: str = author.get("username", "")
+        author_name: str = author.get("name", "") or author_username
+        issue_link = f"{cfg.gitlab_url.rstrip('/')}/{cfg.gitlab_project_id}/-/issues/{issue_id}"
+        notify_issue_invalid(
+            cfg.wechat_webhook_url,
+            issue_id=issue_id,
+            issue_title=title,
+            issue_link=issue_link,
+            author=author_name,
+            developer=cfg.gitlab_username,
+            missing_sections=e.missing,
+            at_userids=cfg.resolve_wechat_ids([author_username]),
+            issue_type="feature",
+        )
         sys.exit(1)
 
     branch_name = make_branch_name("feature", issue_id, title.replace("【需求】", "").strip())
@@ -129,6 +145,21 @@ def cmd_hotfix_start(args: argparse.Namespace) -> None:
         validate_bug_issue(body)
     except ValidationError as e:
         print(f"[错误] {e}", file=sys.stderr)
+        author = issue.get("author", {})
+        author_username: str = author.get("username", "")
+        author_name: str = author.get("name", "") or author_username
+        issue_link = f"{cfg.gitlab_url.rstrip('/')}/{cfg.gitlab_project_id}/-/issues/{issue_id}"
+        notify_issue_invalid(
+            cfg.wechat_webhook_url,
+            issue_id=issue_id,
+            issue_title=title,
+            issue_link=issue_link,
+            author=author_name,
+            developer=cfg.gitlab_username,
+            missing_sections=e.missing,
+            at_userids=cfg.resolve_wechat_ids([author_username]),
+            issue_type="bug",
+        )
         sys.exit(1)
 
     branch_name = make_branch_name("bug", issue_id, title.replace("【Bug】", "").replace("【bug】", "").strip())

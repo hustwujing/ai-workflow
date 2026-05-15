@@ -287,6 +287,39 @@ def notify_release(
     send_webhook(webhook_url, content, at_userids=at_userids)
 
 
+def notify_issue_invalid(
+    webhook_url: str,
+    issue_id: int,
+    issue_title: str,
+    issue_link: str,
+    author: str,
+    developer: str,
+    missing_sections: list[str],
+    at_userids: list[str],
+    issue_type: str = "feature",
+) -> None:
+    missing_str = "、".join(missing_sections)
+    if issue_type == "bug":
+        type_label = "Bug Issue 格式不合规"
+        author_label = "Bug 提出人"
+    else:
+        type_label = "需求 Issue 格式不合规"
+        author_label = "需求提出人"
+    content = (
+        f"### {type_label}\n"
+        f"> **Issue #{issue_id}**：{issue_title}\n"
+        f"> **{author_label}**：{author}\n"
+        f"> **认领研发**：{developer}\n"
+        f"> [查看 Issue]({issue_link})\n\n"
+        f"**不合规详情**\n"
+        f"> 缺少必填小节：{missing_str}\n\n"
+        f"**下一步 · {author}（{author_label}）**\n"
+        f"> 请按标准模板补充以上小节内容：[Issue #{issue_id}]({issue_link})\n"
+        f"> 完成后通知研发重新认领\n"
+    )
+    send_webhook(webhook_url, content, at_userids=at_userids)
+
+
 def notify_daily_report(webhook_url: str, content: str) -> None:
     send_webhook(webhook_url, content)
 
