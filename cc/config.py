@@ -17,9 +17,9 @@ def _load_file(env_file: Path, override: bool = False) -> None:
                 os.environ[key] = val
 
 
-def _load_dotenv() -> None:
+def _load_dotenv() -> tuple[bool, bool]:
     """从当前目录向上查找 .env（团队公共）和 .env.local（个人私有）并加载。
-    .env.local 的值优先级更高，会覆盖 .env 中的同名项。
+    返回 (found_shared, found_local)。
     """
     path = Path.cwd()
     for directory in [path, *path.parents]:
@@ -30,7 +30,8 @@ def _load_dotenv() -> None:
                 _load_file(shared, override=False)
             if local.is_file():
                 _load_file(local, override=True)
-            break
+            return shared.is_file(), local.is_file()
+    return False, False
 
 
 @dataclass
@@ -57,8 +58,18 @@ class Config:
         return [uid for uid in (self.resolve_wechat_id(u) for u in gitlab_usernames) if uid]
 
 
+_PERSONAL_KEYS = {"GITLAB_PRIVATE_TOKEN", "GITLAB_USERNAME"}
+
+
 def load_config() -> Config:
-    _load_dotenv()
+    found_shared, found_local = _load_dotenv()
+
+    if not found_shared and not found_local:
+        print("[错误] 未找到 .env 配置文件。", file=sys.stderr)
+        print("请在项目根目录创建 .env 和 .env.local。", file=sys.stderr)
+        print("参考：README.md 二、安装与配置", file=sys.stderr)
+        sys.exit(1)
+
     missing = []
 
     def require(key: str) -> str:
@@ -101,8 +112,18 @@ def load_config() -> Config:
     )
 
     if missing:
-        print(f"[错误] 缺少必填环境变量：{', '.join(missing)}", file=sys.stderr)
-        print("请参考 .env.example 配置后重试。", file=sys.stderr)
+        personal_missing = [k for k in missing if k in _PERSONAL_KEYS]
+        team_missing = [k for k in missing if k not in _PERSONAL_KEYS]
+        if personal_missing and not found_local:
+            print(f"[错误] 缺少个人配置（通常在 .env.local）：{', '.join(personal_missing)}", file=sys.stderr)
+            print("请在项目根目录创建 .env.local 并填写：", file=sys.stderr)
+            print("  GITLAB_PRIVATE_TOKEN=glpat-xxxxxxxxxxxx", file=sys.stderr)
+            print("  GITLAB_USERNAME=你的GitLab用户名", file=sys.stderr)
+        else:
+            print(f"[错误] 缺少必填配置：{', '.join(missing)}", file=sys.stderr)
+        if team_missing:
+            print(f"以下团队配置请在 .env 中补充：{', '.join(team_missing)}", file=sys.stderr)
+        print("参考：README.md 二、安装与配置", file=sys.stderr)
         sys.exit(1)
 
     return cfg
