@@ -317,7 +317,9 @@ def cmd_daily_report(args: argparse.Namespace) -> None:
     else:
         print(f"[daily-report] 调用 LLM（{cfg.llm_model}）生成总结...")
         content = summarize_with_llm(data, cfg)
-        if not content:
+        if content:
+            print(f"[daily-report] LLM 调用成功，返回 {len(content)} 字符。")
+        else:
             print("[daily-report] LLM 返回空，降级使用内置格式化。")
             content = format_without_llm(data)
 
