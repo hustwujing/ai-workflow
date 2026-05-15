@@ -127,8 +127,10 @@ flowchart TD
 
     A["🧑‍💼 产品\n创建需求 Issue"] -. 👤人工 .-> aN["建议：产品在企微或当面\n告知研发 Issue 已就绪"]:::human
     A --> B["👨‍💻 研发\nccg gitlab feature start"]
+    B -->|"✗ Issue 不合规"| bFail["🤖企微自动\n「需求 Issue 格式不合规」\n@产品 列出缺失小节"]:::bot
+    bFail -. 产品补充后通知研发重新认领 .-> B
     B -. 🤖企微自动 .-> bN["「需求开发开始」\n@产品 @研发"]:::bot
-    B --> C["👨‍💻 研发\nccg gitlab commit（可多次）"]
+    B -->|"✓ 格式合规"| C["👨‍💻 研发\nccg gitlab commit（可多次）"]
     C --> D["👨‍💻 研发\nccg gitlab mr create"]
     D -. 🤖企微自动 .-> dN["「MR 待评审验收」\n@产品 @Reviewer"]:::bot
     D --> E["🧑‍💼 产品\n评论区回复 product:pass"]
@@ -540,8 +542,10 @@ flowchart TD
 
     A["🧑‍💼 产品\n创建 Bug Issue"] -. 👤人工 .-> aN["建议：产品在企微或当面\n告知研发 Bug Issue 已提交"]:::human
     A --> B["👨‍💻 研发\nccg gitlab hotfix start"]
+    B -->|"✗ Issue 不合规"| bFail["🤖企微自动\n「Bug Issue 格式不合规」\n@产品 列出缺失小节"]:::bot
+    bFail -. 产品补充后通知研发重新认领 .-> B
     B -. 🤖企微自动 .-> bN["「🚨 热修开始」\n@产品 @研发 @TL"]:::bot
-    B --> C["👨‍💻 研发\nccg gitlab commit（可多次）"]
+    B -->|"✓ 格式合规"| C["👨‍💻 研发\nccg gitlab commit（可多次）"]
     C --> D["👨‍💻 研发\nccg gitlab mr create → main"]
     D -. 🤖企微自动 .-> dN["「MR 待评审验收」\n@产品 @Reviewer"]:::bot
     D --> E["🧑‍💼 产品\n评论区回复 product:pass"]
