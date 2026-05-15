@@ -107,7 +107,8 @@ def create_local_branch(branch_name: str) -> None:
         raise
 
 
-def push_current_branch() -> None:
+def push_current_branch() -> bool:
+    """推送当前分支到远端。返回 True 表示有新提交被推送，False 表示无变化。"""
     branch = get_current_branch()
     is_feature_branch = bool(re.match(r"^(issue|hotfix)_", branch))
     print(f"[git] 推送分支 {branch} 到远端...")
@@ -143,6 +144,7 @@ def push_current_branch() -> None:
                         f"  git rebase origin/<目标分支>\n"
                         f"  ccg gitlab mr create"
                     )
+                return True
             else:
                 raise BranchError(
                     f"推送被拒绝：远端分支 {branch} 有本地不存在的提交。\n"
@@ -152,6 +154,9 @@ def push_current_branch() -> None:
                 )
         else:
             raise BranchError(f"命令失败: git push -u origin {branch}\n{stderr}")
+    # "Everything up-to-date" 时 returncode=0 且 stderr 含该字样
+    everything_up_to_date = "Everything up-to-date" in (result.stderr or "") + (result.stdout or "")
+    return not everything_up_to_date
 
 
 def get_commits_behind(target_remote_branch: str) -> list[str]:

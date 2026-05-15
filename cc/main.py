@@ -280,7 +280,7 @@ def cmd_mr_create(args: argparse.Namespace) -> None:
 
     print(f"[gitlab] 推送分支并创建 MR → {target_branch}...")
     try:
-        push_current_branch()
+        had_new_commits = push_current_branch()
         mr = api.create_mr(
             source_branch=branch,
             target_branch=target_branch,
@@ -297,41 +297,48 @@ def cmd_mr_create(args: argparse.Namespace) -> None:
                 ex_mr_iid: int = existing_mr.get("iid", 0)
                 ex_mr_url: str = existing_mr.get("web_url", "")
                 ex_mr_title: str = existing_mr.get("title", f"MR !{ex_mr_iid}")
-                print(
-                    f"[提示] 分支已有 MR !{ex_mr_iid}，本次推送已更新其代码，无需重新创建。\n"
-                    f"  MR 页面：{ex_mr_url}",
-                )
-                # Check prior gate status so notify can warn about stale approvals
-                product_was_passed = False
-                dev_was_approved = False
-                try:
-                    ex_comments = api.get_mr_comments(ex_mr_iid)
-                    ex_approvals = api.get_mr_approvals(ex_mr_iid)
-                    ex_desc = existing_mr.get("description", "")
-                    product_was_passed = (
-                        check_product_pass(ex_comments, ex_desc)
-                        or has_stale_product_pass(ex_comments, ex_desc)
+                if had_new_commits:
+                    print(
+                        f"[提示] 分支已有 MR !{ex_mr_iid}，本次推送已更新其代码，无需重新创建。\n"
+                        f"  MR 页面：{ex_mr_url}",
                     )
-                    dev_was_approved = check_dev_approved(ex_approvals)
-                except GitLabError:
-                    pass
-                issue_author = issue.get("author", {})
-                issue_author_username: str = issue_author.get("username", "")
-                issue_author_name: str = issue_author.get("name", "") or issue_author_username
-                at_userids = cfg.resolve_wechat_ids([issue_author_username]) + cfg.at_tl_list
-                notify_mr_updated(
-                    cfg.wechat_webhook_url,
-                    mr_iid=ex_mr_iid,
-                    mr_title=ex_mr_title,
-                    mr_url=ex_mr_url,
-                    target_branch=target_branch,
-                    author_name=issue_author_name,
-                    operator=cfg.gitlab_username,
-                    reviewer_names=reviewer_names,
-                    product_was_passed=product_was_passed,
-                    dev_was_approved=dev_was_approved,
-                    at_userids=at_userids,
-                )
+                else:
+                    print(
+                        f"[提示] 分支已有 MR !{ex_mr_iid}，且代码无变更，无需重新创建。\n"
+                        f"  MR 页面：{ex_mr_url}",
+                    )
+                if had_new_commits:
+                    # Check prior gate status so notify can warn about stale approvals
+                    product_was_passed = False
+                    dev_was_approved = False
+                    try:
+                        ex_comments = api.get_mr_comments(ex_mr_iid)
+                        ex_approvals = api.get_mr_approvals(ex_mr_iid)
+                        ex_desc = existing_mr.get("description", "")
+                        product_was_passed = (
+                            check_product_pass(ex_comments, ex_desc)
+                            or has_stale_product_pass(ex_comments, ex_desc)
+                        )
+                        dev_was_approved = check_dev_approved(ex_approvals)
+                    except GitLabError:
+                        pass
+                    issue_author = issue.get("author", {})
+                    issue_author_username: str = issue_author.get("username", "")
+                    issue_author_name: str = issue_author.get("name", "") or issue_author_username
+                    at_userids = cfg.resolve_wechat_ids([issue_author_username]) + cfg.at_tl_list
+                    notify_mr_updated(
+                        cfg.wechat_webhook_url,
+                        mr_iid=ex_mr_iid,
+                        mr_title=ex_mr_title,
+                        mr_url=ex_mr_url,
+                        target_branch=target_branch,
+                        author_name=issue_author_name,
+                        operator=cfg.gitlab_username,
+                        reviewer_names=reviewer_names,
+                        product_was_passed=product_was_passed,
+                        dev_was_approved=dev_was_approved,
+                        at_userids=at_userids,
+                    )
                 sys.exit(0)
             else:
                 print("[错误] 该分支已存在未合并的 MR，请勿重复创建。", file=sys.stderr)
