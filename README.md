@@ -117,21 +117,34 @@ main（线上生产分支）
 
 适用场景：新功能开发、产品迭代需求
 
+> 蓝色框 🤖 = 企微机器人自动发送；黄色框 👤 = 无自动通知，建议人工在企微告知
+
 ```mermaid
 flowchart TD
+    classDef bot fill:#dbeafe,stroke:#3b82f6,color:#1d4ed8
+    classDef human fill:#fef9c3,stroke:#ca8a04,color:#78350f
+
     A["🧑‍💼 产品\n创建需求 Issue"] --> B["👨‍💻 研发\ncc gitlab feature start"]
+    B -. 🤖企微自动 .-> bN["「需求开发开始」\n@产品 @研发"]:::bot
     B --> C["👨‍💻 研发\ncc gitlab commit（可多次）"]
     C --> D["👨‍💻 研发\ncc gitlab mr create"]
+    D -. 🤖企微自动 .-> dN["「MR 待评审验收」\n@产品 @Reviewer"]:::bot
     D --> E["🧑‍💼 产品\n评论区回复 product:pass"]
     D --> F["👀 Reviewer\nGitLab 点击 Approve"]
+    E -. 👤人工 .-> eN["建议：产品在企微\n告知研发验收已通过"]:::human
+    F -. 👤人工 .-> fN["建议：Reviewer 在企微\n告知研发已 Approve"]:::human
     E --> G{"双门禁通过？"}
     F --> G
     G -->|"✗ 未通过"| E
     G -->|"✓ 通过"| H["👨‍💻 研发\ncc gitlab mr merge → pre"]
+    H -. 🤖企微自动 .-> hN["「MR 已合并到 pre」\n@研发 提示验收步骤"]:::bot
     H --> I["👨‍💻 研发\npre 环境验收"]
     I --> J["👨‍💻 研发\ncc gitlab mr release"]
+    J -. 🤖企微自动 .-> jN["「上线 MR 已创建」\n@Reviewer @研发"]:::bot
     J --> K["👀 Reviewer\nGitLab 点击 Approve"]
+    K -. 👤人工 .-> kN["建议：Reviewer 在企微\n告知研发可执行上线合并"]:::human
     K --> L["👨‍💻 研发\ncc gitlab mr merge → main"]
+    L -. 🤖企微自动 .-> lN["「上线完成」\n@所有产品 线上验收"]:::bot
     L --> M["🧑‍💼 产品\n线上验收"]
 ```
 
@@ -494,19 +507,31 @@ cc gitlab mr merge 46
 
 适用场景：线上紧急 Bug 修复
 
+> 蓝色框 🤖 = 企微机器人自动发送；黄色框 👤 = 无自动通知，建议人工在企微告知
+
 ```mermaid
 flowchart TD
+    classDef bot fill:#dbeafe,stroke:#3b82f6,color:#1d4ed8
+    classDef human fill:#fef9c3,stroke:#ca8a04,color:#78350f
+
     A["🧑‍💼 产品\n创建 Bug Issue"] --> B["👨‍💻 研发\ncc gitlab hotfix start"]
+    B -. 🤖企微自动 .-> bN["「🚨 热修开始」\n@产品 @研发 @TL"]:::bot
     B --> C["👨‍💻 研发\ncc gitlab commit（可多次）"]
     C --> D["👨‍💻 研发\ncc gitlab mr create → main"]
+    D -. 🤖企微自动 .-> dN["「MR 待评审验收」\n@产品 @Reviewer"]:::bot
     D --> E["🧑‍💼 产品\n评论区回复 product:pass"]
     D --> F["👀 Reviewer\nGitLab 点击 Approve"]
+    E -. 👤人工 .-> eN["建议：产品在企微\n告知研发验收已通过"]:::human
+    F -. 👤人工 .-> fN["建议：Reviewer 在企微\n告知研发已 Approve"]:::human
     E --> G{"双门禁通过？"}
     F --> G
     G -->|"✗ 未通过"| E
     G -->|"✓ 通过"| H["👨‍💻 研发\ncc gitlab mr merge → main\nIssue 自动关闭"]
+    H -. 🤖企微自动 .-> hN["「MR 已合并」\n@研发 提示同步 pre"]:::bot
     H --> I["👨‍💻 研发\ncc gitlab mr sync-pre"]
+    I -. 🤖企微自动 .-> iN["「同步 MR 已创建」\n@Reviewer @研发"]:::bot
     I --> J["👀 Reviewer\nGitLab 点击 Approve"]
+    J -. 👤人工 .-> jN["建议：Reviewer 在企微\n告知研发可执行同步合并"]:::human
     J --> K["👨‍💻 研发\ncc gitlab mr merge → pre"]
 ```
 
