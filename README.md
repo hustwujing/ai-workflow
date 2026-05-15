@@ -789,9 +789,28 @@ ccg gitlab daily-report --hours 48
 # 跳过 LLM，使用内置格式化直接发送
 ccg gitlab daily-report --no-llm
 
-# 预览日报内容，不实际发送
+# 预览日报内容（不发送企微）；使用 LLM 时会打印调用状态和返回字符数
 ccg gitlab daily-report --dry-run
 ```
+
+`--dry-run` 控制台输出示例（配置了 LLM）：
+
+```
+[daily-report] 统计过去 24 小时（2026-05-14T10:34:04Z 至今）...
+[daily-report] 拉取新 Issues...
+...
+[daily-report] 调用 LLM（deepseek-v4-pro）生成总结...
+[daily-report] LLM 调用成功，返回 423 字符。
+
+============================================================
+### 📊 团队日报（过去24小时）
+...
+============================================================
+
+[daily-report] --dry-run 模式，不发送企微通知。
+```
+
+> LLM 调用失败时会打印 `LLM 调用失败 HTTP xxx: ...` 并自动降级为内置格式化。
 
 ### LLM 配置（可选）
 
