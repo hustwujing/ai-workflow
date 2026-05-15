@@ -19,7 +19,79 @@
 
 ---
 
-## 二、角色说明
+## 二、安装与配置（研发必读）
+
+### 1. 环境要求
+
+- Python 3.8+
+- Git
+
+### 2. 安装工具
+
+**方式一：直接从 GitHub 安装（推荐）**
+
+```bash
+pip install git+https://github.com/hustwujing/ai-workflow.git
+```
+
+**方式二：克隆后本地安装**
+
+```bash
+git clone https://github.com/hustwujing/ai-workflow.git
+pip install -e ai-workflow/
+```
+
+安装完成后执行以下命令验证：
+
+```bash
+cc --help
+```
+
+### 3. 配置 .env
+
+`cc` 命令运行时会从**当前目录向上**查找 `.env` 文件。建议将 `.env` 放在你的项目仓库根目录，这样在项目内任何位置执行命令都能自动识别。
+
+```bash
+# 在你的项目仓库根目录下
+cp /path/to/ai-workflow/.env.example .env
+```
+
+`.env` 中的配置分两部分：
+
+**团队公共配置（由 TL/管理员统一填写后共享给团队）：**
+
+```ini
+GITLAB_URL=https://gitlab.xxx.com          # GitLab 地址
+GITLAB_PROJECT_ID=123                       # 项目 ID（GitLab 项目页 URL 中的数字）
+GITLAB_BRANCH_MAIN=main                     # 生产分支名
+GITLAB_BRANCH_PRE=pre                       # 预发/测试分支名
+WECHAT_WEBHOOK_URL=https://...             # 企业微信群机器人 Webhook
+WECHAT_AT_TL=138xxxx,139xxxx              # TL 手机号（多个逗号分隔）
+GITLAB_REVIEWER_USERNAMES=zhangsan,lisi    # Reviewer 的 GitLab 用户名
+WECHAT_USER_zhangsan=13900000001           # 团队成员手机号映射（每人一行）
+WECHAT_USER_lisi=13900000002
+```
+
+**个人配置（每位研发自己填写）：**
+
+```ini
+GITLAB_PRIVATE_TOKEN=glpat-xxxxxxxxxxxx    # 个人 GitLab Token（见下方说明）
+GITLAB_USERNAME=wujing03                   # 自己的 GitLab 用户名
+WECHAT_USER_wujing03=17300000000          # 自己的手机号（用于企微@）
+```
+
+> **注意：** `.env` 文件包含个人 Token，已加入 `.gitignore`，不会被提交到代码仓库。
+
+### 4. 获取 GitLab Personal Access Token
+
+1. 登录 GitLab → 右上角头像 → **Preferences**
+2. 左侧菜单 → **Access Tokens**
+3. 填写 Token 名称，勾选 **`api`** 权限，生成后复制
+4. 将 Token 填入 `.env` 的 `GITLAB_PRIVATE_TOKEN` 字段
+
+---
+
+## 三、角色说明
 
 | 角色 | 职责 |
 |------|------|
@@ -29,7 +101,7 @@
 
 ---
 
-## 三、分支结构说明
+## 四、分支结构说明
 
 ```
 main（线上生产分支）
@@ -42,7 +114,7 @@ main（线上生产分支）
 
 ---
 
-## 四、流程一：需求开发流程
+## 五、流程一：需求开发流程
 
 适用场景：新功能开发、产品迭代需求
 
@@ -419,7 +491,7 @@ cc gitlab mr merge 46
 
 ---
 
-## 五、流程二：线上 Bug 热修流程
+## 六、流程二：线上 Bug 热修流程
 
 适用场景：线上紧急 Bug 修复
 
@@ -614,7 +686,7 @@ cc gitlab mr merge 48
 
 ---
 
-## 六、辅助命令
+## 七、辅助命令
 
 ### 检查 MR 双门禁状态（不执行合并）
 
@@ -666,7 +738,7 @@ cc gitlab mr check <mr_iid>
 
 ---
 
-## 七、完整命令速查
+## 八、完整命令速查
 
 | 命令 | 适用阶段 | 执行人 |
 |------|----------|--------|
@@ -681,7 +753,7 @@ cc gitlab mr check <mr_iid>
 
 ---
 
-## 八、Issue 格式模板
+## 九、Issue 格式模板
 
 ### 需求 Issue 模板
 
@@ -727,7 +799,7 @@ cc gitlab mr check <mr_iid>
 
 ---
 
-## 九、常见问题
+## 十、常见问题
 
 **Q：执行 `feature start` / `hotfix start` 报错「Issue格式不合规」怎么办？**
 
