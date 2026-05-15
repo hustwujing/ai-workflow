@@ -124,7 +124,8 @@ flowchart TD
     classDef bot fill:#dbeafe,stroke:#3b82f6,color:#1d4ed8
     classDef human fill:#fef9c3,stroke:#ca8a04,color:#78350f
 
-    A["🧑‍💼 产品\n创建需求 Issue"] --> B["👨‍💻 研发\ncc gitlab feature start"]
+    A["🧑‍💼 产品\n创建需求 Issue"] -. 👤人工 .-> aN["建议：产品在企微或当面\n告知研发 Issue 已就绪"]:::human
+    A --> B["👨‍💻 研发\ncc gitlab feature start"]
     B -. 🤖企微自动 .-> bN["「需求开发开始」\n@产品 @研发"]:::bot
     B --> C["👨‍💻 研发\ncc gitlab commit（可多次）"]
     C --> D["👨‍💻 研发\ncc gitlab mr create"]
@@ -146,6 +147,7 @@ flowchart TD
     K --> L["👨‍💻 研发\ncc gitlab mr merge → main"]
     L -. 🤖企微自动 .-> lN["「上线完成」\n@所有产品 线上验收"]:::bot
     L --> M["🧑‍💼 产品\n线上验收"]
+    M -. 👤人工 .-> mN["发现问题：提 Bug Issue\n并在企微或当面告知研发"]:::human
 ```
 
 ---
@@ -176,6 +178,8 @@ flowchart TD
 > **注意：** 如果格式不合规，研发执行命令时会直接报错退出，无法开工。需产品补充完整后研发才能继续。
 
 **完成标志：** Issue 创建成功，获取到 Issue ID（URL 中的数字，例如 `#123`）
+
+> **下一步（产品）：** Issue 就绪后，在企业微信或当面告知对应研发，说明需求已创建（附上 Issue 链接）。研发收到通知后才会执行 `cc gitlab feature start`。
 
 ---
 
@@ -514,7 +518,8 @@ flowchart TD
     classDef bot fill:#dbeafe,stroke:#3b82f6,color:#1d4ed8
     classDef human fill:#fef9c3,stroke:#ca8a04,color:#78350f
 
-    A["🧑‍💼 产品\n创建 Bug Issue"] --> B["👨‍💻 研发\ncc gitlab hotfix start"]
+    A["🧑‍💼 产品\n创建 Bug Issue"] -. 👤人工 .-> aN["建议：产品在企微或当面\n告知研发 Bug Issue 已提交"]:::human
+    A --> B["👨‍💻 研发\ncc gitlab hotfix start"]
     B -. 🤖企微自动 .-> bN["「🚨 热修开始」\n@产品 @研发 @TL"]:::bot
     B --> C["👨‍💻 研发\ncc gitlab commit（可多次）"]
     C --> D["👨‍💻 研发\ncc gitlab mr create → main"]
@@ -565,6 +570,8 @@ flowchart TD
 ## 严重等级
 （P0 崩溃 / P1 核心功能不可用 / P2 次要功能异常 / P3 体验问题）
 ```
+
+> **下一步（产品）：** Bug Issue 创建后，立即在企业微信或当面告知对应研发，并附上 Issue 链接。线上 Bug 紧急，请同时通知 TL。研发收到通知后执行 `cc gitlab hotfix start`。
 
 ---
 
