@@ -68,8 +68,10 @@ GITLAB_BRANCH_PRE=pre                       # 预发/测试分支名
 WECHAT_WEBHOOK_URL=https://...             # 企业微信群机器人 Webhook
 WECHAT_AT_TL=138xxxx,139xxxx              # TL 手机号（多个逗号分隔）
 GITLAB_REVIEWER_USERNAMES=zhangsan,lisi    # Reviewer 的 GitLab 用户名
-WECHAT_USER_zhangsan=13900000001           # 团队成员手机号映射（每人一行）
+WECHAT_USER_zhangsan=13900000001           # 全体成员手机号映射（每人一行，用于企微@）
 WECHAT_USER_lisi=13900000002
+WECHAT_USER_wujing03=18800000003
+# ...每新增一名成员在此补充一行
 ```
 
 **个人配置（每位研发自己填写）：**
@@ -77,7 +79,6 @@ WECHAT_USER_lisi=13900000002
 ```ini
 GITLAB_PRIVATE_TOKEN=glpat-xxxxxxxxxxxx    # 个人 GitLab Token（见下方说明）
 GITLAB_USERNAME=wujing03                   # 自己的 GitLab 用户名
-WECHAT_USER_wujing03=17300000000          # 自己的手机号（用于企微@）
 ```
 
 > **注意：** `.env` 文件包含个人 Token，已加入 `.gitignore`，不会被提交到代码仓库。
