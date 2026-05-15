@@ -1,7 +1,7 @@
 # AI-Native 产研协作流程工具
 
 > 工具名称：`cc`（cc-gitlab）
-> 适用角色：产品经理、研发、TL（技术负责人）
+> 适用角色：产品经理、研发、Reviewer（TL）
 > 通知渠道：企业微信群机器人
 
 ---
@@ -98,7 +98,7 @@ GITLAB_USERNAME=wujing03                   # 自己的 GitLab 用户名
 |------|------|
 | **产品经理**（Issue 提出人） | 在 GitLab 创建 Issue，在 MR 评论区回复验收口令 |
 | **研发**（开发者） | 执行所有 `cc` 命令，推进代码开发和合并 |
-| **TL**（技术负责人） | 在 GitLab 对 MR 完成 Approve 审批 |
+| **Reviewer**（代码审批人，通常为 TL） | 在 GitLab MR 页面点击 Approve 完成代码审批 |
 
 ---
 
