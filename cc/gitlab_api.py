@@ -181,3 +181,71 @@ class GitLabAPI:
             f"/projects/{self.project_id}/repository/commits",
             params=params,
         )
+
+    def get_issues(
+        self,
+        created_after: Optional[str] = None,
+        updated_after: Optional[str] = None,
+        closed_after: Optional[str] = None,
+        state: Optional[str] = None,
+    ) -> list:
+        """分页获取 Issues，支持时间和状态过滤。时间格式：ISO 8601。"""
+        issues: list = []
+        page = 1
+        while True:
+            params: dict = {"per_page": 100, "page": page}
+            if created_after:
+                params["created_after"] = created_after
+            if updated_after:
+                params["updated_after"] = updated_after
+            if state:
+                params["state"] = state
+            batch = self._request(
+                "GET",
+                f"/projects/{self.project_id}/issues",
+                params=params,
+            )
+            if not batch:
+                break
+            issues.extend(batch)
+            if len(batch) < 100:
+                break
+            page += 1
+        if closed_after:
+            # GitLab issues API 没有 closed_after 参数，在客户端过滤
+            issues = [
+                i for i in issues
+                if not i.get("closed_at") or i["closed_at"] >= closed_after
+            ]
+        return issues
+
+    def get_commits_since(self, since: str) -> list:
+        """获取 since 时间后所有分支的 commits（带行数统计），去重。
+        since 格式：ISO 8601，如 '2026-05-14T00:00:00Z'。
+        """
+        commits: list = []
+        seen_shas: set = set()
+        page = 1
+        while True:
+            batch = self._request(
+                "GET",
+                f"/projects/{self.project_id}/repository/commits",
+                params={
+                    "since": since,
+                    "all": "true",
+                    "with_stats": "true",
+                    "per_page": 100,
+                    "page": page,
+                },
+            )
+            if not batch:
+                break
+            for c in batch:
+                sha = c.get("id", "")
+                if sha and sha not in seen_shas:
+                    seen_shas.add(sha)
+                    commits.append(c)
+            if len(batch) < 100:
+                break
+            page += 1
+        return commits

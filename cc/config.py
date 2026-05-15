@@ -45,6 +45,9 @@ class Config:
     at_tl_list: list[str]                  # TL 的手机号列表（固定）
     gitlab_reviewer_usernames: list[str]   # GitLab reviewer 的用户名
     wechat_user_map: dict[str, str] = field(default_factory=dict)  # gitlab_username -> 手机号
+    llm_base_url: str = "https://api.openai.com/v1"
+    llm_api_key: str = ""
+    llm_model: str = "gpt-4o-mini"
 
     def resolve_wechat_id(self, gitlab_username: str) -> str:
         """GitLab 用户名 → 手机号，找不到返回空字符串"""
@@ -92,6 +95,9 @@ def load_config() -> Config:
         at_tl_list=at_tl_list,
         gitlab_reviewer_usernames=gitlab_reviewer_usernames,
         wechat_user_map=user_map,
+        llm_base_url=optional("LLM_BASE_URL", "https://api.openai.com/v1"),
+        llm_api_key=optional("LLM_API_KEY"),
+        llm_model=optional("LLM_MODEL", "gpt-4o-mini"),
     )
 
     if missing:

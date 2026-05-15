@@ -78,7 +78,7 @@ cp .env.local.example .env.local   # 或手动创建
 
 ```ini
 GITLAB_PRIVATE_TOKEN=glpat-xxxxxxxxxxxx    # 个人 GitLab Token（见下方说明）
-GITLAB_USERNAME=wujing03                   # 自己的 GitLab 用户名
+GITLAB_USERNAME=XXXXXX                   # 自己的 GitLab 用户名
 ```
 
 ### 4. 获取 GitLab Personal Access Token
@@ -762,7 +762,76 @@ cc gitlab mr check <mr_iid>
 
 ---
 
-## 八、完整命令速查
+## 八、每日工作日报
+
+`cc gitlab daily-report` 会从 GitLab 采集过去 N 小时的数据，经 LLM 整理后发送至企业微信，让老板随时掌握团队进展。
+
+**统计维度：**
+- 需求动态：新提出几个、已完成几个（含提出人/执行人）、进行中几个
+- 代码贡献：总提交次数、总行数变化，以及每人的提交量和关联需求
+
+### 使用方法
+
+```bash
+# 完整流程：采集数据 → LLM 总结 → 发企微（需配置 LLM_API_KEY）
+cc gitlab daily-report
+
+# 统计过去 48 小时
+cc gitlab daily-report --hours 48
+
+# 跳过 LLM，使用内置格式化直接发送
+cc gitlab daily-report --no-llm
+
+# 预览日报内容，不实际发送
+cc gitlab daily-report --dry-run
+```
+
+### LLM 配置（可选）
+
+在项目 `.env` 中新增以下配置，支持任何 OpenAI-compatible 接口：
+
+```ini
+LLM_BASE_URL=https://api.openai.com/v1   # 默认值，可替换为其他兼容接口
+LLM_API_KEY=sk-xxx                        # 必填才会启用 LLM
+LLM_MODEL=gpt-4o-mini                    # 默认值
+```
+
+> 不配置 `LLM_API_KEY` 时，工具自动降级为内置格式化，无需任何外部依赖。
+
+### 企业微信效果示例
+
+```
+### 📊 团队日报（过去24小时）
+
+**需求动态**
+> 新提出：2 个
+> - #45 用户中心增加消费记录（提出人：Alice，执行者：张三）
+> - #46 【Bug】登录超时问题（提出人：Bob，待分配）
+> 已完成：1 个
+> - #43 首页改版（执行：张三）
+> 进行中：5 个
+> - #44 支付流程优化（提出人：Alice，执行者：李四）
+> - #47 国际化多语言（提出人：Bob，待分配）
+> - ...（共 5 个）
+
+**代码提交**
+> 共 12 次提交，+320 / -45 行
+> - 张三：8 次，+210 / -30 行（#43 首页改版）
+> - 李四：4 次，+110 / -15 行（#44 支付流程优化）
+```
+
+### 配合定时任务自动发送
+
+在服务器上配置 cron，每天 18:00 自动执行：
+
+```bash
+# crontab -e
+0 18 * * * cd /path/to/project && cc gitlab daily-report
+```
+
+---
+
+## 九、完整命令速查
 
 | 命令 | 适用阶段 | 执行人 |
 |------|----------|--------|
@@ -774,6 +843,7 @@ cc gitlab mr check <mr_iid>
 | `cc gitlab mr merge <mr_iid>` | 执行合并（需双门禁通过） | 研发 |
 | `cc gitlab mr release` | pre 验收通过，创建上线 MR | 研发 |
 | `cc gitlab mr sync-pre` | 热修后同步 main 到 pre | 研发 |
+| `cc gitlab daily-report [--hours N] [--no-llm] [--dry-run]` | 生成并发送每日工作日报 | TL / 管理员 |
 
 ---
 

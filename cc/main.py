@@ -29,6 +29,7 @@ from .mr import (
     has_stale_product_pass,
 )
 from .validator import ValidationError, validate_bug_issue, validate_feature_issue
+from .daily_report import cmd_daily_report
 from .wechat import (
     notify_feature_start,
     notify_hotfix_start,
@@ -731,6 +732,19 @@ def _build_parser() -> argparse.ArgumentParser:
 
     mr_sync_pre = mr_sub.add_parser("sync-pre", help="热修同步 main 到 pre")
     mr_sync_pre.set_defaults(func=cmd_mr_sync_pre)
+
+    # cc gitlab daily-report
+    daily_report_parser = gitlab_sub.add_parser("daily-report", help="生成并发送每日工作日报")
+    daily_report_parser.add_argument(
+        "--hours", type=int, default=24, metavar="N", help="统计过去 N 小时，默认 24"
+    )
+    daily_report_parser.add_argument(
+        "--no-llm", action="store_true", help="跳过 LLM 总结，使用内置格式化"
+    )
+    daily_report_parser.add_argument(
+        "--dry-run", action="store_true", help="只打印报告，不发送企微通知"
+    )
+    daily_report_parser.set_defaults(func=cmd_daily_report)
 
     return parser
 

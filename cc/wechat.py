@@ -287,6 +287,10 @@ def notify_release(
     send_webhook(webhook_url, content, at_userids=at_userids)
 
 
+def notify_daily_report(webhook_url: str, content: str) -> None:
+    send_webhook(webhook_url, content)
+
+
 def notify_sync_pre(
     webhook_url: str,
     mr_iid: int,
