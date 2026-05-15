@@ -1,6 +1,6 @@
 # AI-Native 产研协作流程工具
 
-> 工具名称：`cc`（cc-gitlab）
+> 工具名称：`ccg`（cc-gitlab）
 > 适用角色：产品经理、研发、Reviewer（TL）
 > 通知渠道：企业微信群机器人
 
@@ -8,7 +8,7 @@
 
 ## 一、工具简介
 
-`cc` 是一个 AI-Native 命令行工具，将产品、研发、TL 的协作流程标准化，并在每个关键节点自动驱动下一步动作、向企业微信群发送精准通知。
+`ccg` 是一个 AI-Native 命令行工具，将产品、研发、TL 的协作流程标准化，并在每个关键节点自动驱动下一步动作、向企业微信群发送精准通知。
 
 **核心能力：**
 - 自动校验 Issue 格式，防止信息不完整就开工
@@ -44,39 +44,12 @@ pip install -e ai-workflow/
 安装完成后执行以下命令验证：
 
 ```bash
-cc --help
+ccg --help
 ```
-
-> **⚠ 命令冲突说明：** macOS / Linux 系统上 `/usr/bin/cc` 是 C 编译器的系统别名，`pip install` 后可能仍被系统命令覆盖，导致 `cc` 执行的是编译器而非本工具。
->
-> 先检查是否冲突：
->
-> ```bash
-> which cc          # 若输出 /usr/bin/cc 则存在冲突，需要处理
-> cc --version      # 若输出 C 编译器版本而非工具帮助，则确认冲突
-> ```
->
-> 如有冲突，在 `~/.zshrc`（zsh）或 `~/.bash_profile`（bash）末尾追加以下内容，让 pip 安装路径优先：
->
-> ```bash
-> # 让 pip 安装的 cc 命令优先于系统 /usr/bin/cc
-> export PATH="$(python3 -m site --user-scripts):$PATH"
-> ```
->
-> 或者直接写死 alias（更简单直接）：
->
-> ```bash
-> # 将下方路径替换为 `pip show cc-gitlab` 中 Location 字段对应的 bin 目录下的 cc
-> alias cc='/usr/local/bin/cc'       # macOS Intel 常见路径
-> # alias cc='/opt/homebrew/bin/cc'  # macOS Apple Silicon 常见路径
-> # alias cc="$HOME/.local/bin/cc"   # Linux 常见路径
-> ```
->
-> 追加后执行 `source ~/.zshrc`（或 `source ~/.bash_profile`）重新加载，再运行 `cc --help` 确认输出的是本工具帮助信息。
 
 ### 3. 配置环境变量
 
-`cc` 命令运行时会从**当前目录向上**查找配置文件，建议放在项目仓库根目录。配置分两个文件：
+`ccg` 命令运行时会从**当前目录向上**查找配置文件，建议放在项目仓库根目录。配置分两个文件：
 
 | 文件 | 用途 | 是否提交 git |
 |------|------|-------------|
@@ -122,7 +95,7 @@ GITLAB_USERNAME=XXXXXX                   # 自己的 GitLab 用户名
 | 角色 | 职责 |
 |------|------|
 | **产品经理**（Issue 提出人） | 在 GitLab 创建 Issue，在 MR 评论区回复验收口令 |
-| **研发**（开发者） | 执行所有 `cc` 命令，推进代码开发和合并 |
+| **研发**（开发者） | 执行所有 `ccg` 命令，推进代码开发和合并 |
 | **Reviewer**（代码审批人，通常为 TL） | 在 GitLab MR 页面点击 Approve 完成代码审批 |
 
 ---
@@ -152,10 +125,10 @@ flowchart TD
     classDef human fill:#fef9c3,stroke:#ca8a04,color:#78350f
 
     A["🧑‍💼 产品\n创建需求 Issue"] -. 👤人工 .-> aN["建议：产品在企微或当面\n告知研发 Issue 已就绪"]:::human
-    A --> B["👨‍💻 研发\ncc gitlab feature start"]
+    A --> B["👨‍💻 研发\nccg gitlab feature start"]
     B -. 🤖企微自动 .-> bN["「需求开发开始」\n@产品 @研发"]:::bot
-    B --> C["👨‍💻 研发\ncc gitlab commit（可多次）"]
-    C --> D["👨‍💻 研发\ncc gitlab mr create"]
+    B --> C["👨‍💻 研发\nccg gitlab commit（可多次）"]
+    C --> D["👨‍💻 研发\nccg gitlab mr create"]
     D -. 🤖企微自动 .-> dN["「MR 待评审验收」\n@产品 @Reviewer"]:::bot
     D --> E["🧑‍💼 产品\n评论区回复 product:pass"]
     D --> F["👀 Reviewer\nGitLab 点击 Approve"]
@@ -164,14 +137,14 @@ flowchart TD
     E --> G{"双门禁通过？"}
     F --> G
     G -->|"✗ 未通过"| E
-    G -->|"✓ 通过"| H["👨‍💻 研发\ncc gitlab mr merge → pre"]
+    G -->|"✓ 通过"| H["👨‍💻 研发\nccg gitlab mr merge → pre"]
     H -. 🤖企微自动 .-> hN["「MR 已合并到 pre」\n@研发 提示验收步骤"]:::bot
     H --> I["👨‍💻 研发\npre 环境验收"]
-    I --> J["👨‍💻 研发\ncc gitlab mr release"]
+    I --> J["👨‍💻 研发\nccg gitlab mr release"]
     J -. 🤖企微自动 .-> jN["「上线 MR 已创建」\n@Reviewer @研发"]:::bot
     J --> K["👀 Reviewer\nGitLab 点击 Approve"]
     K -. 👤人工 .-> kN["建议：Reviewer 在企微\n告知研发可执行上线合并"]:::human
-    K --> L["👨‍💻 研发\ncc gitlab mr merge → main"]
+    K --> L["👨‍💻 研发\nccg gitlab mr merge → main"]
     L -. 🤖企微自动 .-> lN["「上线完成」\n@所有产品 线上验收"]:::bot
     L --> M["🧑‍💼 产品\n线上验收"]
     M -. 👤人工 .-> mN["发现问题：提 Bug Issue\n并在企微或当面告知研发"]:::human
@@ -206,7 +179,7 @@ flowchart TD
 
 **完成标志：** Issue 创建成功，获取到 Issue ID（URL 中的数字，例如 `#123`）
 
-> **下一步（产品）：** Issue 就绪后，在企业微信或当面告知对应研发，说明需求已创建（附上 Issue 链接）。研发收到通知后才会执行 `cc gitlab feature start`。
+> **下一步（产品）：** Issue 就绪后，在企业微信或当面告知对应研发，说明需求已创建（附上 Issue 链接）。研发收到通知后才会执行 `ccg gitlab feature start`。
 
 ---
 
@@ -217,16 +190,16 @@ flowchart TD
 **执行命令：**
 
 ```bash
-cc gitlab feature start <issue_id> [--base <分支名>]
+ccg gitlab feature start <issue_id> [--base <分支名>]
 ```
 
 示例：
 ```bash
 # 默认从 main checkout
-cc gitlab feature start 123
+ccg gitlab feature start 123
 
 # 从 pre 分支 checkout（合入目标仍为 pre，不变）
-cc gitlab feature start 123 --base pre
+ccg gitlab feature start 123 --base pre
 ```
 
 **工具自动完成：**
@@ -248,8 +221,8 @@ cc gitlab feature start 123 --base pre
 
 下一步 · wujing03
 > 1. 当前已切换到分支，直接开始开发
-> 2. 每次提交代码执行：cc gitlab commit "具体改动说明"
-> 3. 开发完成后：cc gitlab mr create
+> 2. 每次提交代码执行：ccg gitlab commit "具体改动说明"
+> 3. 开发完成后：ccg gitlab mr create
 ```
 
 **@ 对象：** Issue 提出人（产品）、开发者本人
@@ -261,13 +234,13 @@ cc gitlab feature start 123 --base pre
 **执行命令：**
 
 ```bash
-cc gitlab commit "具体改动说明"
+ccg gitlab commit "具体改动说明"
 ```
 
 示例：
 ```bash
-cc gitlab commit "新增消费记录列表页面"
-cc gitlab commit "接入消费记录接口"
+ccg gitlab commit "新增消费记录列表页面"
+ccg gitlab commit "接入消费记录接口"
 ```
 
 **工具自动完成：**
@@ -282,7 +255,7 @@ cc gitlab commit "接入消费记录接口"
 开发完成后执行：
 
 ```bash
-cc gitlab mr create
+ccg gitlab mr create
 ```
 
 **工具自动完成：**
@@ -320,9 +293,9 @@ cc gitlab mr create
 
 下一步 · wujing03（研发）
 > 1. 随时查看双门禁状态：
->    cc gitlab mr check 45
+>    ccg gitlab mr check 45
 > 2. 双门禁（产品验收 + 研发审批）均通过后执行合并：
->    cc gitlab mr merge 45
+>    ccg gitlab mr merge 45
 ```
 
 **企业微信收到的消息（MR 已存在，补推代码，且双门禁均已通过）：**
@@ -349,8 +322,8 @@ cc gitlab mr create
 > 打开 MR 页面（链接）在右侧点击「Approve」
 
 下一步 · wujing03（研发）
-> 1. 随时查看双门禁状态：cc gitlab mr check 45
-> 2. 双门禁均通过后执行合并：cc gitlab mr merge 45
+> 1. 随时查看双门禁状态：ccg gitlab mr check 45
+> 2. 双门禁均通过后执行合并：ccg gitlab mr merge 45
 ```
 
 > **说明：** 若推送前尚无产品验收或 Approve，则不会出现 `⚠ 注意` 段落，消息内容与上方相同但去掉该警告块。
@@ -373,7 +346,7 @@ cc gitlab mr create
 > **注意：**
 > - `product:pass` 大小写不敏感。
 > - 必须在**最近一次代码推送之后**回复才算有效；推送前的旧验收记录会被自动忽略，需重新回复。
-> - 如果研发补推了新代码（`cc gitlab mr create` 提示「MR 代码已更新」），之前的 `product:pass` 自动失效，需重新验收。
+> - 如果研发补推了新代码（`ccg gitlab mr create` 提示「MR 代码已更新」），之前的 `product:pass` 自动失效，需重新验收。
 
 ---
 
@@ -398,12 +371,12 @@ cc gitlab mr create
 **执行命令：**
 
 ```bash
-cc gitlab mr merge <mr_iid>
+ccg gitlab mr merge <mr_iid>
 ```
 
 示例：
 ```bash
-cc gitlab mr merge 45
+ccg gitlab mr merge 45
 ```
 
 **工具自动完成：**
@@ -424,7 +397,7 @@ cc gitlab mr merge 45
 
 下一步 · wujing03
 > 1. 登录 pre 环境，按 Issue #123 验收标准逐项验证功能
-> 2. 测试通过后创建上线 MR：cc gitlab mr release
+> 2. 测试通过后创建上线 MR：ccg gitlab mr release
 > 3. 等待 张三、李四 审批后执行合并命令上线
 ```
 
@@ -449,7 +422,7 @@ cc gitlab mr merge 45
 pre 验收通过后执行：
 
 ```bash
-cc gitlab mr release
+ccg gitlab mr release
 ```
 
 **工具自动完成：**
@@ -471,7 +444,7 @@ cc gitlab mr release
 
 下一步 · wujing03
 > 张三、李四 审批通过后，执行以下命令合并上线：
-> cc gitlab mr merge 46
+> ccg gitlab mr merge 46
 ```
 
 **@ 对象：** 开发者、TL
@@ -493,7 +466,7 @@ cc gitlab mr release
 Reviewer 审批通过后执行：
 
 ```bash
-cc gitlab mr merge 46
+ccg gitlab mr merge 46
 ```
 
 **工具自动完成：**
@@ -546,10 +519,10 @@ flowchart TD
     classDef human fill:#fef9c3,stroke:#ca8a04,color:#78350f
 
     A["🧑‍💼 产品\n创建 Bug Issue"] -. 👤人工 .-> aN["建议：产品在企微或当面\n告知研发 Bug Issue 已提交"]:::human
-    A --> B["👨‍💻 研发\ncc gitlab hotfix start"]
+    A --> B["👨‍💻 研发\nccg gitlab hotfix start"]
     B -. 🤖企微自动 .-> bN["「🚨 热修开始」\n@产品 @研发 @TL"]:::bot
-    B --> C["👨‍💻 研发\ncc gitlab commit（可多次）"]
-    C --> D["👨‍💻 研发\ncc gitlab mr create → main"]
+    B --> C["👨‍💻 研发\nccg gitlab commit（可多次）"]
+    C --> D["👨‍💻 研发\nccg gitlab mr create → main"]
     D -. 🤖企微自动 .-> dN["「MR 待评审验收」\n@产品 @Reviewer"]:::bot
     D --> E["🧑‍💼 产品\n评论区回复 product:pass"]
     D --> F["👀 Reviewer\nGitLab 点击 Approve"]
@@ -558,13 +531,13 @@ flowchart TD
     E --> G{"双门禁通过？"}
     F --> G
     G -->|"✗ 未通过"| E
-    G -->|"✓ 通过"| H["👨‍💻 研发\ncc gitlab mr merge → main\nIssue 自动关闭"]
+    G -->|"✓ 通过"| H["👨‍💻 研发\nccg gitlab mr merge → main\nIssue 自动关闭"]
     H -. 🤖企微自动 .-> hN["「MR 已合并」\n@研发 提示同步 pre"]:::bot
-    H --> I["👨‍💻 研发\ncc gitlab mr sync-pre"]
+    H --> I["👨‍💻 研发\nccg gitlab mr sync-pre"]
     I -. 🤖企微自动 .-> iN["「同步 MR 已创建」\n@Reviewer @研发"]:::bot
     I --> J["👀 Reviewer\nGitLab 点击 Approve"]
     J -. 👤人工 .-> jN["建议：Reviewer 在企微\n告知研发可执行同步合并"]:::human
-    J --> K["👨‍💻 研发\ncc gitlab mr merge → pre"]
+    J --> K["👨‍💻 研发\nccg gitlab mr merge → pre"]
 ```
 
 ---
@@ -598,23 +571,23 @@ flowchart TD
 （P0 崩溃 / P1 核心功能不可用 / P2 次要功能异常 / P3 体验问题）
 ```
 
-> **下一步（产品）：** Bug Issue 创建后，立即在企业微信或当面告知对应研发，并附上 Issue 链接。线上 Bug 紧急，请同时通知 TL。研发收到通知后执行 `cc gitlab hotfix start`。
+> **下一步（产品）：** Bug Issue 创建后，立即在企业微信或当面告知对应研发，并附上 Issue 链接。线上 Bug 紧急，请同时通知 TL。研发收到通知后执行 `ccg gitlab hotfix start`。
 
 ---
 
 ### 步骤 2：研发 — 拉取热修分支
 
 ```bash
-cc gitlab hotfix start <issue_id> [--base <分支名>]
+ccg gitlab hotfix start <issue_id> [--base <分支名>]
 ```
 
 示例：
 ```bash
 # 默认从 main checkout
-cc gitlab hotfix start 456
+ccg gitlab hotfix start 456
 
 # 从指定分支 checkout（合入目标仍为 main，不变）
-cc gitlab hotfix start 456 --base release/v2.1
+ccg gitlab hotfix start 456 --base release/v2.1
 ```
 
 **工具自动完成：**
@@ -636,8 +609,8 @@ cc gitlab hotfix start 456 --base release/v2.1
 
 下一步 · wujing03
 > 1. 当前已切换到分支，直接开始修复
-> 2. 修复完成后提交代码：cc gitlab commit "修复说明"
-> 3. 推送分支并创建 MR（直接合入 main）：cc gitlab mr create
+> 2. 修复完成后提交代码：ccg gitlab commit "修复说明"
+> 3. 推送分支并创建 MR（直接合入 main）：ccg gitlab mr create
 ```
 
 **@ 对象：** Issue 提出人、开发者、**TL（热修必须通知 TL）**
@@ -647,7 +620,7 @@ cc gitlab hotfix start 456 --base release/v2.1
 ### 步骤 3：研发 — 修复并提交
 
 ```bash
-cc gitlab commit "修复消费记录接口超时问题"
+ccg gitlab commit "修复消费记录接口超时问题"
 ```
 
 ---
@@ -655,7 +628,7 @@ cc gitlab commit "修复消费记录接口超时问题"
 ### 步骤 4：研发 — 创建 MR（直接合入 main）
 
 ```bash
-cc gitlab mr create
+ccg gitlab mr create
 ```
 
 **与需求 MR 的区别：**
@@ -677,7 +650,7 @@ cc gitlab mr create
 ### 步骤 6：研发 — 合并热修 MR
 
 ```bash
-cc gitlab mr merge <mr_iid>
+ccg gitlab mr merge <mr_iid>
 ```
 
 **工具自动完成：**
@@ -698,7 +671,7 @@ cc gitlab mr merge <mr_iid>
 下一步 · wujing03
 > 1. 确认线上 Issue #456 问题已修复
 > 2. 将热修代码同步到 pre 保持环境对齐：
->    cc gitlab mr sync-pre
+>    ccg gitlab mr sync-pre
 ```
 
 **@ 对象：** 开发者、TL
@@ -708,7 +681,7 @@ cc gitlab mr merge <mr_iid>
 ### 步骤 7：研发 — 同步热修代码到 pre
 
 ```bash
-cc gitlab mr sync-pre
+ccg gitlab mr sync-pre
 ```
 
 **工具自动完成：**
@@ -729,7 +702,7 @@ cc gitlab mr sync-pre
 
 下一步 · wujing03
 > 张三、李四 审批通过后，执行以下命令完成同步：
-> cc gitlab mr merge 48
+> ccg gitlab mr merge 48
 ```
 
 ---
@@ -739,7 +712,7 @@ cc gitlab mr sync-pre
 TL 在 GitLab 点击「Approve」后：
 
 ```bash
-cc gitlab mr merge 48
+ccg gitlab mr merge 48
 ```
 
 ---
@@ -751,7 +724,7 @@ cc gitlab mr merge 48
 当不确定 MR 是否满足合并条件时，可先查询：
 
 ```bash
-cc gitlab mr check <mr_iid>
+ccg gitlab mr check <mr_iid>
 ```
 
 **示例输出（双门禁通过，可合并）：**
@@ -760,7 +733,7 @@ cc gitlab mr check <mr_iid>
   产品验收（product:pass）：✓ 通过
   研发 Approval 审批：      ✓ 通过
 
-[结论] 满足合并条件，可执行 cc gitlab mr merge。
+[结论] 满足合并条件，可执行 ccg gitlab mr merge。
 ```
 
 **示例输出（产品未验收）：**
@@ -798,7 +771,7 @@ cc gitlab mr check <mr_iid>
 
 ## 八、每日工作日报
 
-`cc gitlab daily-report` 会从 GitLab 采集过去 N 小时的数据，经 LLM 整理后发送至企业微信，让老板随时掌握团队进展。
+`ccg gitlab daily-report` 会从 GitLab 采集过去 N 小时的数据，经 LLM 整理后发送至企业微信，让老板随时掌握团队进展。
 
 **统计维度：**
 - 需求动态：新提出几个、已完成几个（含提出人/执行人）、进行中几个
@@ -808,16 +781,16 @@ cc gitlab mr check <mr_iid>
 
 ```bash
 # 完整流程：采集数据 → LLM 总结 → 发企微（需配置 LLM_API_KEY）
-cc gitlab daily-report
+ccg gitlab daily-report
 
 # 统计过去 48 小时
-cc gitlab daily-report --hours 48
+ccg gitlab daily-report --hours 48
 
 # 跳过 LLM，使用内置格式化直接发送
-cc gitlab daily-report --no-llm
+ccg gitlab daily-report --no-llm
 
 # 预览日报内容，不实际发送
-cc gitlab daily-report --dry-run
+ccg gitlab daily-report --dry-run
 ```
 
 ### LLM 配置（可选）
@@ -860,7 +833,7 @@ LLM_MODEL=gpt-4o-mini                    # 默认值
 
 ```bash
 # crontab -e
-0 18 * * * cd /path/to/project && cc gitlab daily-report
+0 18 * * * cd /path/to/project && ccg gitlab daily-report
 ```
 
 ---
@@ -869,15 +842,15 @@ LLM_MODEL=gpt-4o-mini                    # 默认值
 
 | 命令 | 适用阶段 | 执行人 |
 |------|----------|--------|
-| `cc gitlab feature start <issue_id> [--base 分支]` | 需求开发开始，默认从 main checkout | 研发 |
-| `cc gitlab hotfix start <issue_id> [--base 分支]` | Bug 热修开始，默认从 main checkout | 研发 |
-| `cc gitlab commit "说明"` | 开发过程中提交代码 | 研发 |
-| `cc gitlab mr create` | 开发完成，创建 MR | 研发 |
-| `cc gitlab mr check <mr_iid>` | 查看 MR 双门禁状态 | 研发 |
-| `cc gitlab mr merge <mr_iid>` | 执行合并（需双门禁通过） | 研发 |
-| `cc gitlab mr release` | pre 验收通过，创建上线 MR | 研发 |
-| `cc gitlab mr sync-pre` | 热修后同步 main 到 pre | 研发 |
-| `cc gitlab daily-report [--hours N] [--no-llm] [--dry-run]` | 生成并发送每日工作日报 | TL / 管理员 |
+| `ccg gitlab feature start <issue_id> [--base 分支]` | 需求开发开始，默认从 main checkout | 研发 |
+| `ccg gitlab hotfix start <issue_id> [--base 分支]` | Bug 热修开始，默认从 main checkout | 研发 |
+| `ccg gitlab commit "说明"` | 开发过程中提交代码 | 研发 |
+| `ccg gitlab mr create` | 开发完成，创建 MR | 研发 |
+| `ccg gitlab mr check <mr_iid>` | 查看 MR 双门禁状态 | 研发 |
+| `ccg gitlab mr merge <mr_iid>` | 执行合并（需双门禁通过） | 研发 |
+| `ccg gitlab mr release` | pre 验收通过，创建上线 MR | 研发 |
+| `ccg gitlab mr sync-pre` | 热修后同步 main 到 pre | 研发 |
+| `ccg gitlab daily-report [--hours N] [--no-llm] [--dry-run]` | 生成并发送每日工作日报 | TL / 管理员 |
 
 ---
 
@@ -946,7 +919,7 @@ A：检查 `.env` 中的 `GITLAB_PRIVATE_TOKEN` 是否填写正确，Token 需�
 A：有未提交代码导致无法切换分支，执行以下命令暂存后重试：
 ```bash
 git stash
-cc gitlab feature start <issue_id>   # 完成后执行 git stash pop 恢复
+ccg gitlab feature start <issue_id>   # 完成后执行 git stash pop 恢复
 ```
 
 **Q：执行 `feature start` / `hotfix start` 报错「本地分支已存在」怎么办？**
@@ -958,7 +931,7 @@ git checkout <分支名>
 
 # 或删除旧分支重新创建
 git branch -D <分支名>
-cc gitlab feature start <issue_id>
+ccg gitlab feature start <issue_id>
 ```
 
 **Q：执行 `mr create` 报错「推送被拒绝」（non-fast-forward）怎么办？**
@@ -966,7 +939,7 @@ cc gitlab feature start <issue_id>
 A：远端分支比本地多了新提交，需先同步再推送：
 ```bash
 git pull --rebase origin <当前分支名>
-cc gitlab mr create
+ccg gitlab mr create
 ```
 
 **Q：执行 `mr create` 提示「分支已有 MR，本次推送已更新其代码」是什么意思？**
@@ -1007,6 +980,6 @@ A：打开错误信息中的 MR 页面链接，常见原因：
 
 A：可能是 `WECHAT_WEBHOOK_URL` 未配置，或该用户的手机号未在 `.env` 中配置 `WECHAT_USER_xxx` 映射。
 
-**Q：`cc gitlab commit` 和直接 `git commit` 有什么区别？**
+**Q：`ccg gitlab commit` 和直接 `git commit` 有什么区别？**
 
-A：`cc gitlab commit` 会自动在 commit message 前追加 `[#issue_id]`，方便后续 MR 关联 Issue；其他逻辑完全一致。
+A：`ccg gitlab commit` 会自动在 commit message 前追加 `[#issue_id]`，方便后续 MR 关联 Issue；其他逻辑完全一致。

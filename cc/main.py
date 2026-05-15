@@ -682,7 +682,7 @@ def cmd_mr_sync_pre(args: argparse.Namespace) -> None:
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="cc",
+        prog="ccg",
         description="GitLab 标准化协作 CLI",
     )
     sub = parser.add_subparsers(dest="platform")

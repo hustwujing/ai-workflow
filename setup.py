@@ -7,7 +7,7 @@ setup(
     python_requires=">=3.8",
     entry_points={
         "console_scripts": [
-            "cc = cc.main:main",
+            "ccg = cc.main:main",
         ],
     },
 )
