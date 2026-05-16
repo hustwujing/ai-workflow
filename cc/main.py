@@ -286,7 +286,7 @@ def cmd_mr_create(args: argparse.Namespace) -> None:
         print("[错误] 无法从分支名解析 Issue ID。", file=sys.stderr)
         sys.exit(1)
 
-    target_branch = get_mr_target_branch(branch, cfg.branch_main, cfg.branch_pre)
+    target_branch = args.target or get_mr_target_branch(branch, cfg.branch_main, cfg.branch_pre)
 
     print(f"[gitlab] 获取 Issue #{issue_id}...")
     try:
@@ -891,6 +891,12 @@ def _build_parser() -> argparse.ArgumentParser:
     mr_sub = mr_parser.add_subparsers(dest="action")
 
     mr_create = mr_sub.add_parser("create", help="一键创建 MR")
+    mr_create.add_argument(
+        "--target",
+        metavar="BRANCH",
+        default=None,
+        help="指定 MR 目标分支（默认：hotfix→main，其他→pre）",
+    )
     mr_create.set_defaults(func=cmd_mr_create)
 
     mr_check = mr_sub.add_parser("check", help="检查 MR 双审核状态")
