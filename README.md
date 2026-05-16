@@ -883,7 +883,7 @@ LLM_MODEL=gpt-4o-mini                    # 默认值
 配置 `GITLAB_HOOK_URL` 后，日报会自动追加时间窗口内的违规记录，包含操作人、违规时间、违规动作、违背原则：
 
 ```ini
-GITLAB_HOOK_URL=http://your-server:8000   # ai-gitlab-hook 服务地址
+GITLAB_HOOK_URL=http://your-server:8000   # 只填 host:port，路径由工具自动拼接
 ```
 
 示例输出：
