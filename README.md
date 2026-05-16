@@ -122,7 +122,7 @@ GITLAB_USERNAME=XXXXXX                   # 自己的 GitLab 用户名
 
 | 角色 | 职责 |
 |------|------|
-| **产品经理**（Issue 提出人/reporter） | 在 GitLab 创建 Issue；在 MR 评论区回复知悉；在 pre 环境验收后于 Issue 评论区发布 `product:pass` |
+| **产品经理**（Issue 提出人/reporter） | 在 GitLab 创建 Issue；在 pre 环境验收后于 Issue 评论区发布 `product:pass` |
 | **研发**（开发者/assignee） | 执行所有 `ccg` 命令，推进代码开发和合并；在 pre 环境验收后于 Issue 评论区发布 `developer:pass` |
 | **Reviewer**（代码审批人，通常为 TL） | 在 GitLab MR 页面点击 Approve 完成代码审批 |
 
@@ -160,9 +160,8 @@ flowchart TD
     B -->|"✓ 格式合规"| C["👨‍💻 研发\nccg gitlab commit（可多次）"]
     C --> D["👨‍💻 研发\nccg gitlab mr create"]
     D -. 🤖企微自动 .-> dN["「MR 待评审」\n@产品（知悉）@Reviewer（审批）"]:::bot
-    D --> E["🧑‍💼 产品\n评论区回复「已知悉本次变更」"]
+    D --> E["🧑‍💼 产品\n查看 MR 了解改动（知悉即可）"]
     D --> F["👀 Reviewer\nGitLab 点击 Approve"]
-    E -. 👤仅作知悉，不阻断合并 .-> eN["产品无需等待研发，\n知悉即可"]:::human
     F -. 👤人工 .-> fN["建议：Reviewer 在企微\n告知研发已 Approve"]:::human
     F --> G{"研发 Approve\n通过？"}
     G -->|"✗ 未通过"| F
@@ -352,8 +351,7 @@ ccg gitlab mr create
 > 查看 MR（链接）
 
 下一步 · xxx（需求提出人）
-> 1. 点击上方「查看 MR」了解本次改动内容
-> 2. 如无异议，请在评论区回复：`已知悉本次变更`
+> 点击上方「查看 MR」了解本次改动内容（知悉即可，无需操作）
 
 下一步 · Reviewer
 > 1. 打开 MR 页面审阅代码改动
@@ -379,8 +377,7 @@ ccg gitlab mr create
 > - 张三、李四 的 Approve 基于旧代码，需重新审批
 
 下一步 · xxx（需求提出人）
-> 代码有新改动，请查看改动内容。
-> 如无异议，请在评论区回复：`已知悉本次变更`
+> 代码有新改动，请查看改动内容（知悉即可，无需操作）
 
 下一步 · 张三、李四
 > 代码有新改动，请重新审阅并完成 Approve。
@@ -397,15 +394,12 @@ ccg gitlab mr create
 
 ### 步骤 5：产品经理 — MR 知悉
 
-**操作位置：** GitLab MR 页面评论区
+**操作位置：** 企微通知中的 MR 链接
 
 **操作步骤：**
-1. 阅读 MR 描述中的「改动说明」，了解本次开发内容
-2. 如无异议，在 MR 页面下方评论区回复：`已知悉本次变更`
+1. 点击链接打开 MR 页面，阅读「改动说明」了解本次开发内容
 
-> **注意：**
-> - 此步骤为**信息同步**，不阻断 MR 合并。研发无需等待产品回复即可在 Approve 通过后执行合并。
-> - **真正的功能验收在步骤 8（pre 环境）进行**，产品需在 pre 环境逐项验证后于 Issue 评论区发布 `product:pass`。
+> 此步骤**纯知悉，无需任何操作**，不阻断合并，研发无需等待。真正的功能验收在步骤 8（pre 环境）进行。
 
 ---
 
@@ -633,9 +627,8 @@ flowchart TD
     B -->|"✓ 格式合规"| C["👨‍💻 研发\nccg gitlab commit（可多次）"]
     C --> D["👨‍💻 研发\nccg gitlab mr create → main"]
     D -. 🤖企微自动 .-> dN["「MR 待评审」\n@产品（知悉）@Reviewer（审批）"]:::bot
-    D --> E["🧑‍💼 产品\n评论区回复「已知悉本次变更」"]
+    D --> E["🧑‍💼 产品\n查看 MR 了解改动（知悉即可）"]
     D --> F["👀 Reviewer\nGitLab 点击 Approve"]
-    E -. 👤仅作知悉，不阻断合并 .-> eN[""]:::human
     F -. 👤人工 .-> fN["建议：Reviewer 在企微\n告知研发已 Approve"]:::human
     F --> G{"研发 Approve\n通过？"}
     G -->|"✗ 未通过"| F
@@ -732,7 +725,7 @@ ccg gitlab mr create
 
 ### 步骤 5：产品知悉 + Reviewer 审批
 
-- **产品：** 在 MR 评论区回复 `已知悉本次变更`（信息同步，不阻断合并）
+- **产品：** 打开 MR 链接了解改动内容（知悉即可，无需操作）
 - **Reviewer：** 在 GitLab MR 页面点击「Approve」
 
 > **注意：热修 MR 需要至少 `HOTFIX_REQUIRED_APPROVALS`（默认 2）名 Reviewer 完成 Approve 才能合并。** 需求 MR 只需 1 名。企微通知中会明确标注所需人数。
