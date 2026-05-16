@@ -135,10 +135,10 @@ GITLAB_USERNAME=XXXXXX                   # 自己的 GitLab 用户名
 main（线上生产分支）
  └── pre（预发/测试分支）
       └── issue_123_xxx（需求功能分支，默认从 main checkout，合入 pre）
-      └── hotfix_456_xxx（热修分支，默认从 main checkout，合入 main）
+      └── hotfix_456_xxx（热修分支，默认从 main checkout，合入 main；非紧急时可 --target pre 随需求上线）
 ```
 
-> 两类分支默认都从 `main` 拉取。如需从其他分支（如 `pre`、`release/xxx`）checkout，可通过 `--base` 参数指定，合入目标不受影响。
+> 两类分支默认都从 `main` 拉取。如需从其他分支（如 `pre`、`release/xxx`）checkout，可通过 `--base` 参数指定。hotfix 合入目标默认为 `main`，可通过 `--target` 覆盖。
 
 ---
 
@@ -736,7 +736,7 @@ ccg gitlab mr create --target pre
 - **产品：** 打开 MR 链接了解改动内容（知悉即可，无需操作）
 - **Reviewer：** 在 GitLab MR 页面点击「Approve」
 
-> **注意：热修 MR 需要至少 `HOTFIX_REQUIRED_APPROVALS`（默认 2）名 Reviewer 完成 Approve 才能合并。** 需求 MR 只需 1 名。企微通知中会明确标注所需人数。
+> **注意：** Approve 人数取决于目标分支——合入 `main`（默认紧急路径）需要至少 `HOTFIX_REQUIRED_APPROVALS`（默认 2）名；合入 `pre`（`--target pre` 非紧急路径）只需 1 名，与需求 MR 相同。企微通知中会明确标注所需人数。
 
 ---
 
@@ -747,12 +747,14 @@ ccg gitlab mr merge <mr_iid>
 ```
 
 **工具自动完成：**
-1. 检查研发 Approve 状态
-2. 合并到 `main`
-3. **自动关闭**对应 Bug Issue
-4. 向企业微信群发送通知
+1. 检查研发 Approve 状态（人数要求见步骤 5）
+2. 合并到目标分支
+3. 向企业微信群发送通知
 
-**企业微信收到的消息：**
+**路径一：合入 `main`（紧急路径，默认）**
+
+- **自动关闭**对应 Bug Issue
+- 通知研发将热修代码同步到 pre（执行步骤 7）
 
 ```
 ### MR 已合并
@@ -766,6 +768,12 @@ ccg gitlab mr merge <mr_iid>
 > 2. 将热修代码同步到 pre 保持环境对齐：
 >    ccg gitlab mr sync-pre
 ```
+
+**路径二：合入 `pre`（非紧急路径，`--target pre`）**
+
+- Issue **不关闭**，等待随下次 `mr release` 统一上线时关闭
+- 通知产品和研发前往 pre 验收（后续流程与需求上线相同：`mr release` → `mr merge`）
+- 无需执行 sync-pre（已在 pre 中）
 
 **@ 对象：** 开发者、TL
 
