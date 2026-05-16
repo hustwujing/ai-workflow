@@ -371,7 +371,7 @@ def cmd_mr_create(args: argparse.Namespace) -> None:
                         operator=cfg.gitlab_username,
                         reviewer_names=reviewer_names,
                         dev_was_approved=dev_was_approved,
-                        required_approvals=cfg.hotfix_required_approvals if branch_type == "bug" else 1,
+                        required_approvals=cfg.hotfix_required_approvals if (branch_type == "bug" and target_branch == cfg.branch_main) else 1,
                         at_userids=at_userids,
                     )
                 sys.exit(0)
@@ -403,7 +403,7 @@ def cmd_mr_create(args: argparse.Namespace) -> None:
         author_name=issue_author_name,
         operator=cfg.gitlab_username,
         reviewer_names=reviewer_names,
-        required_approvals=cfg.hotfix_required_approvals if branch_type == "bug" else 1,
+        required_approvals=cfg.hotfix_required_approvals if (branch_type == "bug" and target_branch == cfg.branch_main) else 1,
         at_userids=at_userids,
     )
 
@@ -443,8 +443,9 @@ def cmd_mr_check(args: argparse.Namespace) -> None:
     approved_count, mr, comments = _do_mr_check(cfg, api, mr_iid)
 
     source_branch: str = mr.get("source_branch", "")
+    mr_target: str = mr.get("target_branch", "")
     is_hotfix = source_branch.startswith("hotfix_")
-    required = cfg.hotfix_required_approvals if is_hotfix else 1
+    required = cfg.hotfix_required_approvals if (is_hotfix and mr_target == cfg.branch_main) else 1
     dev_ok = approved_count >= required
 
     last_push_time = get_last_push_time(comments)
@@ -563,7 +564,7 @@ def cmd_mr_merge(args: argparse.Namespace) -> None:
 
     is_hotfix = source_branch.startswith("hotfix_")
     is_release = (source_branch == cfg.branch_pre and target_branch == cfg.branch_main)
-    required_approvals = cfg.hotfix_required_approvals if is_hotfix else 1
+    required_approvals = cfg.hotfix_required_approvals if (is_hotfix and target_branch == cfg.branch_main) else 1
     dev_ok = approved_count >= required_approvals
 
     if not dev_ok:
