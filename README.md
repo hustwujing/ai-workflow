@@ -11,7 +11,7 @@
 `ccg` 是一个 AI-Native 命令行工具，将产品、研发、TL 的协作流程标准化，并在每个关键节点自动驱动下一步动作、向企业微信群发送精准通知。
 
 **核心能力：**
-- 自动校验 Issue 格式，防止信息不完整就开工；支持三种类型：需求（feature）、优化（improve）、Bug，通过模板章节自动识别，无需依赖标题前缀
+- 自动校验 Issue 格式，防止信息不完整就开工；支持三种类型：需求（feature）、优化（improve）、Bug，通过模板章节自动识别，无需依赖标题前缀；**缺少必填章节或未指派研发（assignee）均视为不合规**，自动通知产品补充
 - 自动创建符合命名规范的 Git 分支
 - 自动创建 MR（Merge Request）并生成标准描述
 - MR 合并前强制研发 Approve 审批
@@ -154,8 +154,8 @@ flowchart TD
 
     A["🧑‍💼 产品\n创建需求/优化 Issue"] -. 👤人工 .-> aN["建议：产品在企微或当面\n告知研发 Issue 已就绪"]:::human
     A --> B["👨‍💻 研发\nccg gitlab feature start"]
-    B -->|"✗ Issue 不合规"| bFail["🤖企微自动\n「需求/优化 Issue 格式不合规」\n@产品 列出缺失小节"]:::bot
-    bFail -. 产品补充后通知研发重新认领 .-> B
+    B -->|"✗ Issue 不合规"| bFail["🤖企微自动\n「需求/优化 Issue 格式不合规」\n@产品 列出缺失项"]:::bot
+    bFail -. 产品补充并指派后通知研发重新认领 .-> B
     B -. 🤖企微自动 .-> bN["「需求/优化开发开始」\n@产品 @研发"]:::bot
     B -->|"✓ 格式合规"| C["👨‍💻 研发\nccg gitlab commit（可多次）"]
     C --> D["👨‍💻 研发\nccg gitlab mr create"]
@@ -225,7 +225,7 @@ flowchart TD
 
 > **工具如何识别类型：** 通过 description 中的章节头自动判断，无需在标题中加前缀。`需求背景` → 需求，`优化背景` → 优化。
 
-> **注意：** 如果格式不合规，研发执行 `feature start` 时会直接报错退出，同时工具会**自动向企业微信群发送通知并 @ 产品**，消息中列明缺失的小节，产品补充后通知研发重新认领即可。
+> **注意：** 如果格式不合规（缺少必填章节，或未通过 GitLab 指派研发 assignee），研发执行 `feature start` 时会直接报错退出，同时工具会**自动向企业微信群发送通知并 @ 产品**，消息中列明缺失项，产品补充并指派后通知研发重新认领即可。
 
 **完成标志：** Issue 创建成功，获取到 Issue ID（URL 中的数字，例如 `#123`）
 
@@ -621,8 +621,8 @@ flowchart TD
 
     A["🧑‍💼 产品\n创建 Bug Issue"] -. 👤人工 .-> aN["建议：产品在企微或当面\n告知研发 Bug Issue 已提交"]:::human
     A --> B["👨‍💻 研发\nccg gitlab hotfix start"]
-    B -->|"✗ Issue 不合规"| bFail["🤖企微自动\n「Bug Issue 格式不合规」\n@产品 列出缺失小节"]:::bot
-    bFail -. 产品补充后通知研发重新认领 .-> B
+    B -->|"✗ Issue 不合规"| bFail["🤖企微自动\n「Bug Issue 格式不合规」\n@产品 列出缺失项"]:::bot
+    bFail -. 产品补充并指派后通知研发重新认领 .-> B
     B -. 🤖企微自动 .-> bN["「🚨 热修开始」\n@产品 @研发 @TL"]:::bot
     B -->|"✓ 格式合规"| C["👨‍💻 研发\nccg gitlab commit（可多次）"]
     C --> D["👨‍💻 研发\nccg gitlab mr create → main"]
@@ -668,6 +668,8 @@ flowchart TD
 ```
 
 > **工具如何识别类型：** 通过 `问题现象` 章节头自动判断为 Bug，无需在标题中加前缀。
+
+> **注意：** 6 个章节必须齐全，同时需通过 GitLab **指派负责研发（assignee）**，否则研发执行 `hotfix start` 时会报错退出并 @ 产品补充。
 
 > **下一步（产品）：** Bug Issue 创建后，立即在企业微信或当面告知对应研发，并附上 Issue 链接。线上 Bug 紧急，请同时通知 TL。
 
@@ -998,7 +1000,7 @@ WECHAT_DAILY_REPORT_WEBHOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send
 
 **Q：执行 `feature start` / `hotfix start` 报错「Issue格式不合规」怎么办？**
 
-A：工具会报错退出并**自动向企业微信群发送通知 @ 产品**，消息中列明缺少哪些小节及 Issue 直链。产品在 GitLab Issue 中补充完整后通知研发重新执行命令即可。
+A：工具会报错退出并**自动向企业微信群发送通知 @ 产品**，消息中列明缺少哪些项（可能是缺失章节，也可能是未指派 assignee）及 Issue 直链。产品在 GitLab Issue 中补充完整并指派研发后通知研发重新执行命令即可。
 
 **Q：执行 `feature start` / `hotfix start` 报错「Issue 不存在或无权访问」怎么办？**
 

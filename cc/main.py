@@ -27,7 +27,7 @@ from .mr import (
     get_last_push_time,
     get_mr_target_branch,
 )
-from .validator import ValidationError, validate_bug_issue, validate_feature_issue, validate_improve_issue, detect_issue_type
+from .validator import get_missing_sections, detect_issue_type
 from .daily_report import cmd_daily_report
 from .wechat import (
     notify_feature_start,
@@ -80,13 +80,11 @@ def cmd_feature_start(args: argparse.Namespace) -> None:
         print("[错误] 无法识别 Issue 类型，请确认 description 是否使用了标准模板（需求/优化/Bug）", file=sys.stderr)
         sys.exit(1)
 
-    try:
-        if issue_type == "improve":
-            validate_improve_issue(body)
-        else:
-            validate_feature_issue(body)
-    except ValidationError as e:
-        print(f"[错误] {e}", file=sys.stderr)
+    missing = get_missing_sections(body, issue_type)
+    if not (issue.get("assignees") or issue.get("assignee")):
+        missing.append("负责人（指派研发）")
+    if missing:
+        print(f"[错误] Issue格式不合规，缺少：{', '.join(missing)}", file=sys.stderr)
         author = issue.get("author", {})
         author_username: str = author.get("username", "")
         author_name: str = author.get("name", "") or author_username
@@ -98,7 +96,7 @@ def cmd_feature_start(args: argparse.Namespace) -> None:
             issue_link=issue_link,
             author=author_name,
             developer=cfg.gitlab_username,
-            missing_sections=e.missing,
+            missing_sections=missing,
             at_userids=cfg.resolve_wechat_ids([author_username]),
             issue_type=issue_type,
         )
@@ -154,10 +152,11 @@ def cmd_hotfix_start(args: argparse.Namespace) -> None:
     title: str = issue.get("title", "")
     body: str = issue.get("description", "") or ""
 
-    try:
-        validate_bug_issue(body)
-    except ValidationError as e:
-        print(f"[错误] {e}", file=sys.stderr)
+    missing = get_missing_sections(body, "bug")
+    if not (issue.get("assignees") or issue.get("assignee")):
+        missing.append("负责人（指派研发）")
+    if missing:
+        print(f"[错误] Issue格式不合规，缺少：{', '.join(missing)}", file=sys.stderr)
         author = issue.get("author", {})
         author_username: str = author.get("username", "")
         author_name: str = author.get("name", "") or author_username
@@ -169,7 +168,7 @@ def cmd_hotfix_start(args: argparse.Namespace) -> None:
             issue_link=issue_link,
             author=author_name,
             developer=cfg.gitlab_username,
-            missing_sections=e.missing,
+            missing_sections=missing,
             at_userids=cfg.resolve_wechat_ids([author_username]),
             issue_type="bug",
         )

@@ -37,6 +37,12 @@ def _check_sections(body: str, sections: list[str]) -> list[str]:
     return missing
 
 
+def get_missing_sections(body: str, issue_type: IssueType) -> list[str]:
+    """返回缺失的必填小节列表，不抛异常，供外部与其他校验项合并后统一处理。"""
+    sections = {"feature": FEATURE_SECTIONS, "improve": IMPROVE_SECTIONS, "bug": BUG_SECTIONS}[issue_type]
+    return _check_sections(body or "", sections)
+
+
 def validate_feature_issue(body: str) -> None:
     missing = _check_sections(body or "", FEATURE_SECTIONS)
     if missing:
