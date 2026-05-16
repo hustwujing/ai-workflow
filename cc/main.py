@@ -21,7 +21,7 @@ from .gitlab_api import GitLabAPI, GitLabError, parse_closing_issue_ids
 from .mr import (
     build_mr_description,
     check_dev_approved,
-    check_issue_pass,
+    check_issue_verdict,
     get_approved_count,
     get_last_approval_time,
     get_last_push_time,
@@ -501,12 +501,15 @@ def _check_pre_acceptance(cfg, api) -> tuple[bool, list[dict]]:
             print(f"[警告] 获取 Issue #{issue_id} 评论失败：{e}", file=sys.stderr)
             comments = []
 
-        product_passed, product_proxy, product_proxy_user = check_issue_pass(
+        product_verdict, product_proxy, product_proxy_user, product_note = check_issue_verdict(
             comments, "product:pass", merged_at, reporter_username
         )
-        developer_passed, developer_proxy, developer_proxy_user = check_issue_pass(
+        developer_verdict, developer_proxy, developer_proxy_user, developer_note = check_issue_verdict(
             comments, "developer:pass", merged_at, assignee_username
         )
+
+        product_passed = product_verdict == "passed"
+        developer_passed = developer_verdict == "passed"
 
         if not product_passed or not developer_passed:
             all_passed = False
@@ -520,11 +523,15 @@ def _check_pre_acceptance(cfg, api) -> tuple[bool, list[dict]]:
             "assignee_name": assignee_name,
             "issue_url": issue_url,
             "product_passed": product_passed,
+            "product_verdict": product_verdict,
             "product_proxy": product_proxy,
             "product_proxy_user": product_proxy_user,
+            "product_note": product_note,
             "developer_passed": developer_passed,
+            "developer_verdict": developer_verdict,
             "developer_proxy": developer_proxy,
             "developer_proxy_user": developer_proxy_user,
+            "developer_note": developer_note,
         })
 
     return all_passed, issue_results
@@ -601,9 +608,11 @@ def cmd_mr_merge(args: argparse.Namespace) -> None:
         proxy_warnings = [r for r in issue_results if r["product_proxy"] or r["developer_proxy"]]
         for r in proxy_warnings:
             if r["product_proxy"]:
-                print(f"[警示] Issue #{r['issue_id']} product:pass 由 {r['product_proxy_user']} 代发（负责人：{r['reporter_name']}）")
+                note_str = f"  备注：{r['product_note']}" if r.get("product_note") else ""
+                print(f"[警示] Issue #{r['issue_id']} product:pass 由 {r['product_proxy_user']} 代发（负责人：{r['reporter_name']}）{note_str}")
             if r["developer_proxy"]:
-                print(f"[警示] Issue #{r['issue_id']} developer:pass 由 {r['developer_proxy_user']} 代发（负责人：{r['assignee_name']}）")
+                note_str = f"  备注：{r['developer_note']}" if r.get("developer_note") else ""
+                print(f"[警示] Issue #{r['issue_id']} developer:pass 由 {r['developer_proxy_user']} 代发（负责人：{r['assignee_name']}）{note_str}")
 
     print(f"[gitlab] 合并 MR !{mr_iid}...")
     try:

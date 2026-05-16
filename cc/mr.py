@@ -49,31 +49,63 @@ def check_dev_approved(approvals: dict, required: int = 1) -> bool:
     return get_approved_count(approvals) >= required
 
 
+def _normalize_colon(text: str) -> str:
+    """Normalize fullwidth colon ：(U+FF1A) to ASCII colon for matching."""
+    return text.replace("：", ":")
+
+
+def check_issue_verdict(
+    comments: list[dict],
+    pass_keyword: str,
+    since_time: Optional[str],
+    expected_username: str,
+) -> tuple[str, bool, str, str]:
+    """Find the most recent pass or reject verdict in issue comments after since_time.
+
+    Returns (verdict, is_proxy, proxy_username, extra_text).
+    verdict: 'passed' | 'rejected' | 'pending'
+    extra_text is the comment body with the matched keyword stripped, trimmed.
+
+    Matching is case-insensitive and tolerates fullwidth colons (：vs :).
+    The most recent qualifying comment wins; reject after pass → rejected, pass after reject → passed.
+    """
+    reject_keyword = pass_keyword.replace(":pass", ":reject")
+    pass_pattern = re.compile(re.escape(pass_keyword), re.IGNORECASE)
+    reject_pattern = re.compile(re.escape(reject_keyword), re.IGNORECASE)
+
+    for note in sorted(comments, key=lambda n: n.get("created_at", ""), reverse=True):
+        if note.get("system"):
+            continue
+        raw_body: str = note.get("body", "")
+        body = _normalize_colon(raw_body)
+        created_at = note.get("created_at", "")
+        if since_time and created_at <= since_time:
+            continue
+        # reject is more conservative: if present in the same comment, treat as reject
+        if reject_pattern.search(body):
+            author_username = note.get("author", {}).get("username", "")
+            is_proxy = bool(expected_username) and author_username != expected_username
+            extra_text = reject_pattern.sub("", body).strip()
+            return "rejected", is_proxy, (author_username if is_proxy else ""), extra_text
+        if pass_pattern.search(body):
+            author_username = note.get("author", {}).get("username", "")
+            is_proxy = bool(expected_username) and author_username != expected_username
+            extra_text = pass_pattern.sub("", body).strip()
+            return "passed", is_proxy, (author_username if is_proxy else ""), extra_text
+    return "pending", False, "", ""
+
+
 def check_issue_pass(
     comments: list[dict],
     keyword: str,
     since_time: Optional[str],
     expected_username: str,
-) -> tuple[bool, bool, str]:
-    """Check if keyword appears in issue comments after since_time.
-
-    Returns (passed, is_proxy, proxy_username).
-    is_proxy=True means someone other than expected_username posted the pass.
-    """
-    pattern = re.compile(re.escape(keyword), re.IGNORECASE)
-    for note in sorted(comments, key=lambda n: n.get("created_at", ""), reverse=True):
-        if note.get("system"):
-            continue
-        body: str = note.get("body", "")
-        if not pattern.search(body):
-            continue
-        created_at = note.get("created_at", "")
-        if since_time and created_at <= since_time:
-            continue
-        author_username = note.get("author", {}).get("username", "")
-        is_proxy = bool(expected_username) and author_username != expected_username
-        return True, is_proxy, (author_username if is_proxy else "")
-    return False, False, ""
+) -> tuple[bool, bool, str, str]:
+    """Thin wrapper around check_issue_verdict for callers that only need pass/fail."""
+    verdict, is_proxy, proxy_user, extra_text = check_issue_verdict(
+        comments, keyword, since_time, expected_username
+    )
+    return verdict == "passed", is_proxy, proxy_user, extra_text
 
 
 def get_last_push_time(comments: list[dict]) -> Optional[str]:

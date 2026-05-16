@@ -275,12 +275,41 @@ def notify_release_blocked(
     failed = [r for r in issue_results if not r["product_passed"] or not r["developer_passed"]]
     issue_blocks = []
     for r in failed:
-        pp = "✓ 已通过" if r["product_passed"] else "✗ 未通过"
-        dp = "✓ 已通过" if r["developer_passed"] else "✗ 未通过"
-        if r.get("product_proxy"):
-            pp += f"（⚠ 代发：{r['product_proxy_user']}）"
-        if r.get("developer_proxy"):
-            dp += f"（⚠ 代发：{r['developer_proxy_user']}）"
+        pv = r.get("product_verdict", "pending" if not r["product_passed"] else "passed")
+        dv = r.get("developer_verdict", "pending" if not r["developer_passed"] else "passed")
+        p_note = r.get("product_note", "")
+        d_note = r.get("developer_note", "")
+
+        if r["product_passed"]:
+            pp = "✓ 已通过"
+            if r.get("product_proxy"):
+                pp += f"（⚠ 代发：{r['product_proxy_user']}）"
+            if p_note:
+                pp += f"：{p_note}"
+        elif pv == "rejected":
+            pp = "✗ 已拒绝"
+            if r.get("product_proxy"):
+                pp += f"（代发：{r['product_proxy_user']}）"
+            if p_note:
+                pp += f"：{p_note}"
+        else:
+            pp = "✗ 未验收"
+
+        if r["developer_passed"]:
+            dp = "✓ 已通过"
+            if r.get("developer_proxy"):
+                dp += f"（⚠ 代发：{r['developer_proxy_user']}）"
+            if d_note:
+                dp += f"：{d_note}"
+        elif dv == "rejected":
+            dp = "✗ 已拒绝"
+            if r.get("developer_proxy"):
+                dp += f"（代发：{r['developer_proxy_user']}）"
+            if d_note:
+                dp += f"：{d_note}"
+        else:
+            dp = "✗ 未验收"
+
         block = (
             f"**Issue #{r['issue_id']}**：{r['issue_title']}（[查看]({r['issue_url']})）\n"
             f"> 产品验收（product:pass）：{pp}  负责人：{r['reporter_name']}\n"
@@ -295,8 +324,10 @@ def notify_release_blocked(
         f"> [查看 MR]({mr_url})\n\n"
         + "\n\n".join(issue_blocks)
         + "\n\n**请以上负责人登录 pre 环境完成验收，在对应 Issue 评论区发布口令后重试**\n"
-        f"> 产品：`product:pass`\n"
-        f"> 研发：`developer:pass`\n"
+        f"> 产品验收通过：`product:pass`\n"
+        f"> 产品验收拒绝：`product:reject 原因说明`\n"
+        f"> 研发验收通过：`developer:pass`\n"
+        f"> 研发验收拒绝：`developer:reject 原因说明`\n"
     )
     send_webhook(webhook_url, content, at_userids=at_userids)
 
