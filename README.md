@@ -70,6 +70,7 @@ WECHAT_AT_TL=138xxxx,139xxxx              # Reviewer 手机号（多个逗号分
 GITLAB_REVIEWER_USERNAMES=zhangsan,lisi    # Reviewer GitLab 用户名
 WECHAT_USER_zhangsan=13900000001           # 全体成员手机号映射（新成员入职时追加）
 WECHAT_USER_lisi=13900000002
+HOTFIX_REQUIRED_APPROVALS=2               # 热修 MR 所需 Approve 人数（默认 2，需求 MR 固定为 1）
 ```
 
 **第二步：在项目仓库根目录创建 `.env.local`，填写个人配置（每位研发自己操作）：**
@@ -683,9 +684,10 @@ ccg gitlab mr create
 
 ### 步骤 5：产品知悉 + Reviewer 审批
 
-与需求流程步骤 5、6 相同：
 - **产品：** 在 MR 评论区回复 `已知悉本次变更`（信息同步，不阻断合并）
 - **Reviewer：** 在 GitLab MR 页面点击「Approve」
+
+> **注意：热修 MR 需要至少 `HOTFIX_REQUIRED_APPROVALS`（默认 2）名 Reviewer 完成 Approve 才能合并。** 需求 MR 只需 1 名。企微通知中会明确标注所需人数。
 
 ---
 
@@ -752,18 +754,18 @@ ccg gitlab mr merge 48
 ccg gitlab mr check <mr_iid>
 ```
 
-**示例输出（审批通过，可合并）：**
+**示例输出（需求 MR，审批通过）：**
 ```
 === MR !45 门禁状态 ===
-  研发 Approval 审批：✓ 通过
+  研发 Approval 审批：✓ 通过（1/1）
 
 [结论] 满足合并条件，可执行 ccg gitlab mr merge。
 ```
 
-**示例输出（审批未通过）：**
+**示例输出（热修 MR，仅 1 人 Approve，不足 2 人）：**
 ```
-=== MR !45 门禁状态 ===
-  研发 Approval 审批：✗ 未通过
+=== MR !47 门禁状态 ===
+  研发 Approval 审批：✗ 未通过（1/2）
 
 [结论] 尚不满足合并条件，请等待研发 Approve 审批。
 ```
@@ -771,7 +773,7 @@ ccg gitlab mr check <mr_iid>
 **示例输出（Approve 后又补推代码且项目未开启自动重置）：**
 ```
 === MR !45 门禁状态 ===
-  研发 Approval 审批：✓ 通过  ⚠ 审批后有新提交，建议 Reviewer 重新审阅
+  研发 Approval 审批：✓ 通过（1/1）  ⚠ 审批后有新提交，建议 Reviewer 重新审阅
 
 [结论] 门禁已通过，但审批后有新提交，建议 Reviewer 确认后再执行合并。
 ```

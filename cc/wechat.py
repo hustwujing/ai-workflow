@@ -116,8 +116,10 @@ def notify_mr_created(
     operator: str,
     reviewer_names: list[str],
     at_userids: list[str],
+    required_approvals: int = 1,
 ) -> None:
     reviewer_label = "、".join(reviewer_names) if reviewer_names else "Reviewer"
+    approve_note = f"需要 **{required_approvals} 名** Reviewer 完成 Approve" if required_approvals > 1 else "在页面右侧点击「Approve」完成审批"
     content = (
         f"### MR 待评审\n"
         f"> **MR !{mr_iid}**：{mr_title}\n"
@@ -130,11 +132,11 @@ def notify_mr_created(
         f"> 2. 如无异议，请在 [评论区]({mr_url}#notes) 回复：`已知悉本次变更`\n\n"
         f"**下一步 · {reviewer_label}**\n"
         f"> 1. 打开 [MR 页面]({mr_url}) 审阅代码改动\n"
-        f"> 2. 在页面右侧点击「Approve」完成审批\n\n"
+        f"> 2. {approve_note}\n\n"
         f"**下一步 · {operator}（研发）**\n"
         f"> 1. 随时查看审批状态：\n"
         f">    `ccg gitlab mr check {mr_iid}`\n"
-        f"> 2. 研发 Approve 通过后执行合并：\n"
+        f"> 2. 审批通过后执行合并：\n"
         f">    `ccg gitlab mr merge {mr_iid}`\n"
     )
     send_webhook(webhook_url, content, at_userids=at_userids)
@@ -151,6 +153,7 @@ def notify_mr_updated(
     reviewer_names: list[str],
     at_userids: list[str],
     dev_was_approved: bool = False,
+    required_approvals: int = 1,
 ) -> None:
     reviewer_label = "、".join(reviewer_names) if reviewer_names else "Reviewer"
 
@@ -173,11 +176,13 @@ def notify_mr_updated(
         f"> 如无异议，请在 [评论区]({mr_url}#notes) 回复：`已知悉本次变更`\n\n"
         f"**下一步 · {reviewer_label}**\n"
         f"> 代码有新改动，请重新审阅并完成 Approve。\n"
-        f"> 打开 [MR 页面]({mr_url}) 在右侧点击「Approve」\n\n"
+        f"> 打开 [MR 页面]({mr_url}) 在右侧点击「Approve」"
+        + (f"（需要 **{required_approvals} 名**）" if required_approvals > 1 else "")
+        + f"\n\n"
         f"**下一步 · {operator}（研发）**\n"
         f"> 1. 随时查看审批状态：\n"
         f">    `ccg gitlab mr check {mr_iid}`\n"
-        f"> 2. 研发 Approve 通过后执行合并：\n"
+        f"> 2. 审批通过后执行合并：\n"
         f">    `ccg gitlab mr merge {mr_iid}`\n"
     )
     send_webhook(webhook_url, content, at_userids=at_userids)

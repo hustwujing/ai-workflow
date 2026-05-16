@@ -41,9 +41,12 @@ def build_mr_description(
     )
 
 
-def check_dev_approved(approvals: dict) -> bool:
-    approved_by = approvals.get("approved_by", [])
-    return len(approved_by) > 0
+def get_approved_count(approvals: dict) -> int:
+    return len(approvals.get("approved_by", []))
+
+
+def check_dev_approved(approvals: dict, required: int = 1) -> bool:
+    return get_approved_count(approvals) >= required
 
 
 def check_issue_pass(

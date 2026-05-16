@@ -22,6 +22,7 @@ from .mr import (
     build_mr_description,
     check_dev_approved,
     check_issue_pass,
+    get_approved_count,
     get_last_approval_time,
     get_last_push_time,
     get_mr_target_branch,
@@ -358,6 +359,7 @@ def cmd_mr_create(args: argparse.Namespace) -> None:
                         operator=cfg.gitlab_username,
                         reviewer_names=reviewer_names,
                         dev_was_approved=dev_was_approved,
+                        required_approvals=cfg.hotfix_required_approvals if branch_type == "bug" else 1,
                         at_userids=at_userids,
                     )
                 sys.exit(0)
@@ -389,12 +391,13 @@ def cmd_mr_create(args: argparse.Namespace) -> None:
         author_name=issue_author_name,
         operator=cfg.gitlab_username,
         reviewer_names=reviewer_names,
+        required_approvals=cfg.hotfix_required_approvals if branch_type == "bug" else 1,
         at_userids=at_userids,
     )
 
 
-def _do_mr_check(cfg, api, mr_iid: int) -> tuple[bool, dict, list]:
-    """Returns (dev_ok, mr_info, comments)"""
+def _do_mr_check(cfg, api, mr_iid: int) -> tuple[int, dict, list]:
+    """Returns (approved_count, mr_info, comments)"""
     try:
         mr = api.get_mr(mr_iid)
     except GitLabError as e:
@@ -416,8 +419,8 @@ def _do_mr_check(cfg, api, mr_iid: int) -> tuple[bool, dict, list]:
         print(f"[错误] {e}", file=sys.stderr)
         sys.exit(1)
 
-    dev_ok = check_dev_approved(approvals)
-    return dev_ok, mr, comments
+    approved_count = get_approved_count(approvals)
+    return approved_count, mr, comments
 
 
 def cmd_mr_check(args: argparse.Namespace) -> None:
@@ -425,16 +428,21 @@ def cmd_mr_check(args: argparse.Namespace) -> None:
     api = GitLabAPI(cfg)
     mr_iid = int(args.mr_iid)
 
-    dev_ok, mr, comments = _do_mr_check(cfg, api, mr_iid)
+    approved_count, mr, comments = _do_mr_check(cfg, api, mr_iid)
+
+    source_branch: str = mr.get("source_branch", "")
+    is_hotfix = source_branch.startswith("hotfix_")
+    required = cfg.hotfix_required_approvals if is_hotfix else 1
+    dev_ok = approved_count >= required
 
     last_push_time = get_last_push_time(comments)
-
     stale_dev = False
     if dev_ok and last_push_time:
         last_approval_time = get_last_approval_time(comments)
         if last_approval_time and last_push_time > last_approval_time:
             stale_dev = True
-    dev_label = "✓ 通过" if dev_ok else "✗ 未通过"
+
+    dev_label = f"✓ 通过（{approved_count}/{required}）" if dev_ok else f"✗ 未通过（{approved_count}/{required}）"
     if stale_dev:
         dev_label += "  ⚠ 审批后有新提交，建议 Reviewer 重新审阅"
 
@@ -527,7 +535,7 @@ def cmd_mr_merge(args: argparse.Namespace) -> None:
     api = GitLabAPI(cfg)
     mr_iid = int(args.mr_iid)
 
-    dev_ok, mr, _comments = _do_mr_check(cfg, api, mr_iid)
+    approved_count, mr, _comments = _do_mr_check(cfg, api, mr_iid)
 
     mr_url: str = mr.get("web_url", "")
     source_branch: str = mr.get("source_branch", "")
@@ -536,14 +544,25 @@ def cmd_mr_merge(args: argparse.Namespace) -> None:
 
     is_hotfix = source_branch.startswith("hotfix_")
     is_release = (source_branch == cfg.branch_pre and target_branch == cfg.branch_main)
+    required_approvals = cfg.hotfix_required_approvals if is_hotfix else 1
+    dev_ok = approved_count >= required_approvals
 
     if not dev_ok:
         reviewer_label = "、".join(tl_names) if tl_names else "Reviewer"
-        print(
-            f"[错误] 研发 Approval 审批未通过，请 {reviewer_label} 在 GitLab 完成审批后再合并。\n"
-            f"  MR 页面：{mr_url}",
-            file=sys.stderr,
-        )
+        if is_hotfix:
+            print(
+                f"[错误] 热修 MR 需要至少 {required_approvals} 名 Reviewer Approve，"
+                f"当前 {approved_count}/{required_approvals}。\n"
+                f"  请 {reviewer_label} 在 GitLab 完成审批后再合并。\n"
+                f"  MR 页面：{mr_url}",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                f"[错误] 研发 Approval 审批未通过，请 {reviewer_label} 在 GitLab 完成审批后再合并。\n"
+                f"  MR 页面：{mr_url}",
+                file=sys.stderr,
+            )
         sys.exit(1)
 
     # Step 9: pre→main 合并前检查所有 issue 的验收状态
