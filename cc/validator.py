@@ -9,16 +9,21 @@ class ValidationError(Exception):
         self.missing: List[str] = missing or []
 
 
-IssueType = Literal["feature", "bug"]
+IssueType = Literal["feature", "improve", "bug"]
 
 FEATURE_SECTIONS = ["需求背景", "功能详细描述", "验收标准", "优先级"]
+IMPROVE_SECTIONS = ["优化背景", "现状问题", "优化方案", "预期收益", "优先级"]
 BUG_SECTIONS = ["问题现象", "复现步骤", "预期正常结果", "实际异常结果", "出现环境", "严重等级"]
 
 
-def detect_issue_type(title: str) -> Optional[IssueType]:
-    if title.startswith("【需求】"):
+def detect_issue_type(body: str) -> Optional[IssueType]:
+    """根据 description 中的唯一标识章节推断 issue 类型。"""
+    b = body or ""
+    if re.search(r"##\s*优化背景", b):
+        return "improve"
+    if re.search(r"##\s*需求背景", b):
         return "feature"
-    if title.startswith("【Bug】") or title.startswith("【bug】"):
+    if re.search(r"##\s*问题现象", b):
         return "bug"
     return None
 
@@ -34,6 +39,16 @@ def _check_sections(body: str, sections: list[str]) -> list[str]:
 
 def validate_feature_issue(body: str) -> None:
     missing = _check_sections(body or "", FEATURE_SECTIONS)
+    if missing:
+        raise ValidationError(
+            f"Issue格式不合规，请产品按标准模板补充完整后再开发\n"
+            f"缺少必填小节：{', '.join(missing)}",
+            missing=missing,
+        )
+
+
+def validate_improve_issue(body: str) -> None:
+    missing = _check_sections(body or "", IMPROVE_SECTIONS)
     if missing:
         raise ValidationError(
             f"Issue格式不合规，请产品按标准模板补充完整后再开发\n"

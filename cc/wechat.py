@@ -56,12 +56,19 @@ def notify_feature_start(
     developer: str,
     author: str,
     at_userids: list[str],
+    issue_type: str = "feature",
 ) -> None:
     issue_link = f"{gitlab_url.rstrip('/')}/{project_id}/-/issues/{issue_id}"
+    if issue_type == "improve":
+        title_label = "优化开发开始"
+        author_label = "优化提出人"
+    else:
+        title_label = "需求开发开始"
+        author_label = "需求提出人"
     content = (
-        f"### 需求开发开始\n"
+        f"### {title_label}\n"
         f"> **Issue #{issue_id}**：{issue_title}\n"
-        f"> **需求提出人**：{author}\n"
+        f"> **{author_label}**：{author}\n"
         f"> **开发者**：{developer}\n"
         f"> **分支**：`{branch_name}`（基于 `{base_branch}`）\n"
         f"> [查看 Issue]({issue_link})\n\n"
@@ -372,6 +379,9 @@ def notify_issue_invalid(
     if issue_type == "bug":
         type_label = "Bug Issue 格式不合规"
         author_label = "Bug 提出人"
+    elif issue_type == "improve":
+        type_label = "优化 Issue 格式不合规"
+        author_label = "优化提出人"
     else:
         type_label = "需求 Issue 格式不合规"
         author_label = "需求提出人"

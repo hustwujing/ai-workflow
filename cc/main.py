@@ -27,7 +27,7 @@ from .mr import (
     get_last_push_time,
     get_mr_target_branch,
 )
-from .validator import ValidationError, validate_bug_issue, validate_feature_issue
+from .validator import ValidationError, validate_bug_issue, validate_feature_issue, validate_improve_issue, detect_issue_type
 from .daily_report import cmd_daily_report
 from .wechat import (
     notify_feature_start,
@@ -72,8 +72,19 @@ def cmd_feature_start(args: argparse.Namespace) -> None:
     title: str = issue.get("title", "")
     body: str = issue.get("description", "") or ""
 
+    issue_type = detect_issue_type(body)
+    if issue_type == "bug":
+        print("[错误] 该 Issue 为 Bug 类型，请使用 ccg gitlab hotfix start 创建热修分支", file=sys.stderr)
+        sys.exit(1)
+    if issue_type is None:
+        print("[错误] 无法识别 Issue 类型，请确认 description 是否使用了标准模板（需求/优化/Bug）", file=sys.stderr)
+        sys.exit(1)
+
     try:
-        validate_feature_issue(body)
+        if issue_type == "improve":
+            validate_improve_issue(body)
+        else:
+            validate_feature_issue(body)
     except ValidationError as e:
         print(f"[错误] {e}", file=sys.stderr)
         author = issue.get("author", {})
@@ -89,11 +100,12 @@ def cmd_feature_start(args: argparse.Namespace) -> None:
             developer=cfg.gitlab_username,
             missing_sections=e.missing,
             at_userids=cfg.resolve_wechat_ids([author_username]),
-            issue_type="feature",
+            issue_type=issue_type,
         )
         sys.exit(1)
 
-    branch_name = make_branch_name("feature", issue_id, title.replace("【需求】", "").strip())
+    clean_title = title.replace("【需求】", "").replace("【优化】", "").strip()
+    branch_name = make_branch_name("feature", issue_id, clean_title)
     base_branch = args.base or cfg.branch_main
 
     try:
@@ -123,6 +135,7 @@ def cmd_feature_start(args: argparse.Namespace) -> None:
         developer=cfg.gitlab_username,
         author=author_name,
         at_userids=at_userids,
+        issue_type=issue_type,
     )
 
 
