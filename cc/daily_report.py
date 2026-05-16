@@ -19,6 +19,15 @@ from .wechat import notify_daily_report
 # ---------------------------------------------------------------------------
 
 
+_VIOLATION_PRINCIPLES: dict[str, str] = {
+    "issue_closed_no_assignee": "Issue 必须有人认领才能关闭",
+}
+
+
+def _violation_principle(violation_type: str) -> str:
+    return _VIOLATION_PRINCIPLES.get(violation_type, violation_type)
+
+
 def _iso(dt: datetime) -> str:
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -39,6 +48,29 @@ def _extract_assignees(issue: dict) -> list[str]:
         a = issue["assignee"]
         names.append(a.get("name") or a.get("username") or "")
     return [n for n in names if n]
+
+
+def fetch_violations(hook_url: str, since_dt: datetime) -> list[dict]:
+    start = since_dt.strftime("%Y-%m-%d")
+    end = datetime.now().strftime("%Y-%m-%d")
+    url = f"{hook_url.rstrip('/')}/violations?start={start}&end={end}"
+    try:
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            items = data.get("items") or []
+            return [
+                {
+                    "operator_name": v.get("operator_name") or v.get("operator", ""),
+                    "action": v.get("description", ""),
+                    "principle": _violation_principle(v.get("violation_type", "")),
+                    "time": v.get("created_at", ""),
+                }
+                for v in items
+            ]
+    except Exception as e:
+        print(f"[daily-report] 查询违规记录失败（{url}）：{e}", file=sys.stderr)
+        return []
 
 
 def collect_report_data(
@@ -162,6 +194,12 @@ def collect_report_data(
     total_additions = sum(c["additions"] for c in commits)
     total_deletions = sum(c["deletions"] for c in commits)
 
+    # --- 违规记录（可选，需配置 GITLAB_HOOK_URL）---
+    violations: list[dict] = []
+    if cfg.gitlab_hook_url:
+        print("[daily-report] 查询违规记录...")
+        violations = fetch_violations(cfg.gitlab_hook_url, since_dt)
+
     return {
         "period": f"过去{hours}小时",
         "since": since_str,
@@ -172,6 +210,7 @@ def collect_report_data(
         "total_additions": total_additions,
         "total_deletions": total_deletions,
         "per_person": per_person,
+        "violations": violations,
     }
 
 
@@ -190,6 +229,7 @@ _PROMPT_TEMPLATE = """\
 - 如果某人当天没有提交，不要列出
 - 进行中的需求逐条列出，包含提出者和执行者
 - 标题用 ### 开头
+- 如果 violations 字段非空，必须输出「流程违规记录」板块，逐条列出：操作人、违规时间、违规动作、违背原则
 
 【输出示例】
 ### 📊 团队日报（过去24小时）
@@ -206,6 +246,11 @@ _PROMPT_TEMPLATE = """\
 > 共 12 次提交，+320 / -45 行
 > - 张三：8 次，+210 / -30 行（#43 首页改版）
 > - 李四：4 次，+110 / -15 行（#44 支付优化）
+
+**⚠ 流程违规记录**
+> - **张三** · 2026-05-16 10:23
+>   违规动作：Issue #12「xxx」无人认领即关闭
+>   违背原则：Issue 必须有人认领才能关闭
 
 【待整理数据】
 {data}
@@ -290,6 +335,18 @@ def format_without_llm(data: dict) -> str:
             lines.append(
                 f"> - {name}：{stat['commits']} 次，"
                 f"+{stat['additions']} / -{stat['deletions']} 行{issue_str}"
+            )
+
+    # 违规记录
+    violations = data.get("violations") or []
+    if violations:
+        lines.append("")
+        lines.append("**⚠ 流程违规记录**")
+        for v in violations:
+            lines.append(
+                f"> - **{v['operator_name']}** · {v['time'][:16]}\n"
+                f">   违规动作：{v['action']}\n"
+                f">   违背原则：{v['principle']}"
             )
 
     return "\n".join(lines)

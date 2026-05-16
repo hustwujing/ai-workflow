@@ -48,6 +48,7 @@ class Config:
     gitlab_reviewer_usernames: list[str]   # GitLab reviewer 的用户名
     wechat_user_map: dict[str, str] = field(default_factory=dict)  # gitlab_username -> 手机号
     hotfix_required_approvals: int = 2
+    gitlab_hook_url: str = ""               # ai-gitlab-hook 服务地址，用于查询违规记录
     llm_base_url: str = "https://api.openai.com/v1"
     llm_api_key: str = ""
     llm_model: str = "gpt-4o-mini"
@@ -110,6 +111,7 @@ def load_config() -> Config:
         gitlab_reviewer_usernames=gitlab_reviewer_usernames,
         wechat_user_map=user_map,
         hotfix_required_approvals=int(optional("HOTFIX_REQUIRED_APPROVALS", "2")),
+        gitlab_hook_url=optional("GITLAB_HOOK_URL"),
         llm_base_url=optional("LLM_BASE_URL", "https://api.openai.com/v1"),
         llm_api_key=optional("LLM_API_KEY"),
         llm_model=optional("LLM_MODEL", "gpt-4o-mini"),
