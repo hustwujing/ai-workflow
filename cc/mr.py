@@ -70,8 +70,14 @@ def check_issue_verdict(
     The most recent qualifying comment wins; reject after pass → rejected, pass after reject → passed.
     """
     reject_keyword = pass_keyword.replace(":pass", ":reject")
-    pass_pattern = re.compile(re.escape(pass_keyword), re.IGNORECASE)
-    reject_pattern = re.compile(re.escape(reject_keyword), re.IGNORECASE)
+    # \b 确保口令不藏在其他单词里（如 myproduct:pass 不应命中）
+    # (?:ed)? 兼容 passed / rejected 过去时变体
+    pass_pattern = re.compile(
+        r"\b" + re.escape(pass_keyword) + r"(?:ed)?\b", re.IGNORECASE
+    )
+    reject_pattern = re.compile(
+        r"\b" + re.escape(reject_keyword) + r"(?:ed)?\b", re.IGNORECASE
+    )
 
     for note in sorted(comments, key=lambda n: n.get("created_at", ""), reverse=True):
         if note.get("system"):

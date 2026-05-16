@@ -15,7 +15,7 @@
 - 自动创建符合命名规范的 Git 分支
 - 自动创建 MR（Merge Request）并生成标准描述
 - MR 合并前强制研发 Approve 审批
-- pre 环境验收双确认：产品和研发分别在 Issue 评论区发布验收口令，缺一不可才允许上线
+- pre 环境验收双确认：产品和研发分别在 Issue 评论区发布验收口令（`product:pass` / `developer:pass`），缺一不可才允许上线；支持 `product:reject` / `developer:reject 原因` 显式拒绝并附带说明
 - 全程企业微信 @ 对应责任人，明确下一步动作
 
 ---
@@ -429,16 +429,20 @@ ccg gitlab mr merge 45
 **产品操作步骤：**
 1. 登录 pre 环境
 2. 按 Issue 中「验收标准」逐项验证功能
-3. 验收通过后，在 **GitLab Issue 评论区**回复：`product:pass`
+3. 验收通过：在 **GitLab Issue 评论区**回复 `product:pass`
+4. 验收不通过：在 **GitLab Issue 评论区**回复 `product:reject 原因说明`（原因说明会同步到企微阻断通知）
 
 **研发操作步骤：**
 1. 登录 pre 环境
 2. 按 Issue 中「验收标准」逐项验证功能
-3. 验收通过后，在 **GitLab Issue 评论区**回复：`developer:pass`
+3. 验收通过：在 **GitLab Issue 评论区**回复 `developer:pass`
+4. 验收不通过：在 **GitLab Issue 评论区**回复 `developer:reject 原因说明`
 
 > **注意：**
-> - `product:pass` 和 `developer:pass` 发在 **Issue 评论区**，不是 MR 评论区。
-> - 两者均需在该 Issue 关联的 MR **最后一次合入 pre** 之后发布才有效；之前的旧记录会被忽略。
+> - 口令发在 **Issue 评论区**，不是 MR 评论区。
+> - 均需在该 Issue 关联的 MR **最后一次合入 pre** 之后发布才有效；之前的旧记录会被忽略。
+> - **最新评论时序胜出**：reject 晚于 pass 则视为拒绝，pass 晚于 reject 则视为通过。
+> - 支持全角冒号（`：`）等价于半角冒号（`:`）。
 > - 如果发现 Bug，直接在 pre 上修复后重新提交，重新合入 pre 后需重新发布验收口令。
 > - 如果一个需求有多名研发，任意一人发布 `developer:pass` 即可；但非 Issue assignee 代发时，上线合并时企微会出现警示。
 > - 产品由 Issue reporter 发布为正常；其他产品代发时，企微同样会出现警示。
@@ -508,8 +512,9 @@ ccg gitlab mr merge 46
 **Step 9 验收检查逻辑：**
 - 找出所有通过 `Closes #xxx` 关联到 pre MR 的、**当前仍为 opened 状态**的 Issue
 - 对每个 Issue，以其关联 MR **最后一次合入 pre 的时间**为基准
-- 检查该 Issue 评论区在基准时间之后是否存在 `product:pass`（产品）和 `developer:pass`（研发）
-- 任意 Issue 缺失其中一项 → 拒绝合并，向企微发送阻断通知
+- 检查该 Issue 评论区在基准时间之后 `product:pass` / `product:reject` 和 `developer:pass` / `developer:reject` 的最新评论
+- 最新评论时序胜出：pass 晚于 reject → 通过；reject 晚于 pass → 拒绝（附带原因）；无记录 → 未验收
+- 任意 Issue 存在未通过项（rejected 或 pending）→ 拒绝合并，向企微发送阻断通知
 
 **企业微信收到的消息（验收未完成，阻断上线）：**
 
@@ -520,16 +525,18 @@ ccg gitlab mr merge 46
 > 查看 MR（链接）
 
 **Issue #123**：【需求】用户个人中心增加消费记录入口（查看）
-> 产品验收（product:pass）：✗ 未通过  负责人：xxx
+> 产品验收（product:pass）：✗ 已拒绝：页面在 iPhone SE 下布局错乱  负责人：xxx
 > 研发验收（developer:pass）：✓ 已通过
 
 **Issue #124**：【需求】另一个需求（查看）
 > 产品验收（product:pass）：✓ 已通过
-> 研发验收（developer:pass）：✗ 未通过  负责人：yyy
+> 研发验收（developer:pass）：✗ 未验收  负责人：yyy
 
 请以上负责人登录 pre 环境完成验收，在对应 Issue 评论区发布口令后重试
-> 产品：product:pass
-> 研发：developer:pass
+> 产品验收通过：product:pass
+> 产品验收拒绝：product:reject 原因说明
+> 研发验收通过：developer:pass
+> 研发验收拒绝：developer:reject 原因说明
 ```
 
 **企业微信收到的消息（验收通过，上线完成）：**
@@ -976,6 +983,10 @@ A：企微群会收到阻断通知，按 Issue 列出哪些是产品未 pass、�
 **Q：product:pass / developer:pass 发在哪里？**
 
 A：发在 **GitLab Issue 评论区**，不是 MR 评论区。进入对应 Issue 页面，在下方评论框输入口令并提交即可。
+
+**Q：验收发现问题，如何明确拒绝并说明原因？**
+
+A：在 **GitLab Issue 评论区**回复 `product:reject 原因说明` 或 `developer:reject 原因说明`（冒号后跟原因）。工具在下次上线合并时会在企微阻断通知中展示该原因，方便研发快速定位问题。修复重新合入 pre 后，需重新发布 `pass` 口令（最新评论时序胜出，pass 晚于 reject 则视为通过）。
 
 **Q：执行 `mr merge` 报错「分支无法合并」（406）怎么办？**
 
