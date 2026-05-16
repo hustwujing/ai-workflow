@@ -124,6 +124,23 @@ class GitLabAPI:
             "GET", f"/projects/{self.project_id}/merge_requests/{mr_iid}"
         )
 
+    def get_issue_comments(self, issue_id: int) -> list:
+        notes = []
+        page = 1
+        while True:
+            batch = self._request(
+                "GET",
+                f"/projects/{self.project_id}/issues/{issue_id}/notes",
+                params={"per_page": 100, "page": page},
+            )
+            if not batch:
+                break
+            notes.extend(batch)
+            if len(batch) < 100:
+                break
+            page += 1
+        return notes
+
     def get_mr_comments(self, mr_iid: int) -> list:
         notes = []
         page = 1

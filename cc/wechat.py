@@ -119,7 +119,7 @@ def notify_mr_created(
 ) -> None:
     reviewer_label = "、".join(reviewer_names) if reviewer_names else "Reviewer"
     content = (
-        f"### MR 待评审验收\n"
+        f"### MR 待评审\n"
         f"> **MR !{mr_iid}**：{mr_title}\n"
         f"> **关联 Issue**：#{issue_id}\n"
         f"> **合并目标**：`{target_branch}`\n"
@@ -127,16 +127,14 @@ def notify_mr_created(
         f"> [查看 MR]({mr_url})\n\n"
         f"**下一步 · {author_name}（需求提出人）**\n"
         f"> 1. 点击上方「查看 MR」了解本次改动内容\n"
-        f"> 2. 确认功能符合验收标准后，打开 [评论区]({mr_url}#notes) 回复：\n"
-        f">    - 验收通过：`product:pass`\n"
-        f">    - 需要修改：`product:reject 具体原因`\n\n"
+        f"> 2. 如无异议，请在 [评论区]({mr_url}#notes) 回复：`已知悉本次变更`\n\n"
         f"**下一步 · {reviewer_label}**\n"
         f"> 1. 打开 [MR 页面]({mr_url}) 审阅代码改动\n"
         f"> 2. 在页面右侧点击「Approve」完成审批\n\n"
         f"**下一步 · {operator}（研发）**\n"
-        f"> 1. 随时查看双门禁状态：\n"
+        f"> 1. 随时查看审批状态：\n"
         f">    `ccg gitlab mr check {mr_iid}`\n"
-        f"> 2. 双门禁（产品验收 + 研发审批）均通过后执行合并：\n"
+        f"> 2. 研发 Approve 通过后执行合并：\n"
         f">    `ccg gitlab mr merge {mr_iid}`\n"
     )
     send_webhook(webhook_url, content, at_userids=at_userids)
@@ -152,22 +150,15 @@ def notify_mr_updated(
     operator: str,
     reviewer_names: list[str],
     at_userids: list[str],
-    product_was_passed: bool = False,
     dev_was_approved: bool = False,
 ) -> None:
     reviewer_label = "、".join(reviewer_names) if reviewer_names else "Reviewer"
 
     stale_lines = ""
-    if product_was_passed or dev_was_approved:
-        stale_items = []
-        if product_was_passed:
-            stale_items.append(f"> - **{author_name}** 的验收（product:pass）基于旧代码，需重新验收")
-        if dev_was_approved:
-            stale_items.append(f"> - **{reviewer_label}** 的 Approve 基于旧代码，需重新审批")
+    if dev_was_approved:
         stale_lines = (
             f"**⚠ 注意：本次推送使以下已通过的门禁失效**\n"
-            + "\n".join(stale_items)
-            + "\n\n"
+            f"> - **{reviewer_label}** 的 Approve 基于旧代码，需重新审批\n\n"
         )
 
     content = (
@@ -178,17 +169,15 @@ def notify_mr_updated(
         f"> [查看 MR]({mr_url})\n\n"
         f"{stale_lines}"
         f"**下一步 · {author_name}（需求提出人）**\n"
-        f"> 代码有新改动，请确认功能是否符合验收标准。\n"
-        f"> 如需重新验收，在 [评论区]({mr_url}#notes) 回复：\n"
-        f">    - 验收通过：`product:pass`\n"
-        f">    - 需要修改：`product:reject 具体原因`\n\n"
+        f"> 代码有新改动，请查看改动内容。\n"
+        f"> 如无异议，请在 [评论区]({mr_url}#notes) 回复：`已知悉本次变更`\n\n"
         f"**下一步 · {reviewer_label}**\n"
         f"> 代码有新改动，请重新审阅并完成 Approve。\n"
         f"> 打开 [MR 页面]({mr_url}) 在右侧点击「Approve」\n\n"
         f"**下一步 · {operator}（研发）**\n"
-        f"> 1. 随时查看双门禁状态：\n"
+        f"> 1. 随时查看审批状态：\n"
         f">    `ccg gitlab mr check {mr_iid}`\n"
-        f"> 2. 双门禁（产品验收 + 研发审批）均通过后执行合并：\n"
+        f"> 2. 研发 Approve 通过后执行合并：\n"
         f">    `ccg gitlab mr merge {mr_iid}`\n"
     )
     send_webhook(webhook_url, content, at_userids=at_userids)
@@ -205,19 +194,26 @@ def notify_mr_merged(
     main_branch: str,
     tl_names: list[str],
     at_userids: list[str],
+    issue_reporter_name: str = "",
+    issue_link: str = "",
 ) -> None:
-    issue_line = f"> **关联 Issue**：#{issue_id}（已自动关闭）\n" if issue_id else ""
     tl_label = "、".join(tl_names) if tl_names else "TL"
 
     if target_branch == pre_branch:
+        issue_line = f"> **关联 Issue**：#{issue_id}\n" if issue_id else ""
+        issue_notes_link = f"{issue_link}#notes" if issue_link else ""
+        issue_ref = f"Issue #{issue_id}" if issue_id else "Issue"
+        reporter_label = issue_reporter_name or "需求提出人"
         next_steps = (
-            f"**下一步 · {operator}**\n"
-            f"> 1. 登录 `{pre_branch}` 环境，按 Issue #{issue_id} 验收标准逐项验证功能\n"
-            f"> 2. 测试通过后创建上线 MR：\n"
-            f">    `ccg gitlab mr release`\n"
-            f"> 3. 等待 {tl_label} 审批后执行合并命令上线\n"
+            f"**下一步 · {reporter_label}（产品）**\n"
+            f"> 1. 登录 `{pre_branch}` 环境，按 {issue_ref} 验收标准逐项验证功能\n"
+            f"> 2. 验收通过后，在 [Issue 评论区]({issue_notes_link}) 回复：`product:pass`\n\n"
+            f"**下一步 · {operator}（研发）**\n"
+            f"> 1. 登录 `{pre_branch}` 环境，按 {issue_ref} 验收标准逐项验证功能\n"
+            f"> 2. 验收通过后，在 [Issue 评论区]({issue_notes_link}) 回复：`developer:pass`\n"
         )
     else:
+        issue_line = f"> **关联 Issue**：#{issue_id}（已自动关闭）\n" if issue_id else ""
         next_steps = (
             f"**下一步 · {operator}**\n"
             f"> 1. 确认线上 Issue #{issue_id} 问题已修复\n"
@@ -258,6 +254,44 @@ def notify_release_merged(
         f"**下一步 · 各需求提出人**\n"
         f"> 请登录线上环境，按各自 Issue 的验收标准逐项验证功能是否正常\n"
         f"> 如发现问题请及时提 Bug Issue（标题以【Bug】开头）或联系 {operator}\n"
+    )
+    send_webhook(webhook_url, content, at_userids=at_userids)
+
+
+def notify_release_blocked(
+    webhook_url: str,
+    mr_iid: int,
+    mr_url: str,
+    main_branch: str,
+    operator: str,
+    issue_results: list[dict],
+    at_userids: list[str],
+) -> None:
+    failed = [r for r in issue_results if not r["product_passed"] or not r["developer_passed"]]
+    issue_blocks = []
+    for r in failed:
+        pp = "✓ 已通过" if r["product_passed"] else "✗ 未通过"
+        dp = "✓ 已通过" if r["developer_passed"] else "✗ 未通过"
+        if r.get("product_proxy"):
+            pp += f"（⚠ 代发：{r['product_proxy_user']}）"
+        if r.get("developer_proxy"):
+            dp += f"（⚠ 代发：{r['developer_proxy_user']}）"
+        block = (
+            f"**Issue #{r['issue_id']}**：{r['issue_title']}（[查看]({r['issue_url']})）\n"
+            f"> 产品验收（product:pass）：{pp}  负责人：{r['reporter_name']}\n"
+            f"> 研发验收（developer:pass）：{dp}  负责人：{r['assignee_name']}"
+        )
+        issue_blocks.append(block)
+
+    content = (
+        f"### pre → {main_branch} 上线被阻止\n"
+        f"> **MR !{mr_iid}** 合入主干失败，以下 Issue 未完成 pre 环境验收\n"
+        f"> **操作人**：{operator}\n"
+        f"> [查看 MR]({mr_url})\n\n"
+        + "\n\n".join(issue_blocks)
+        + "\n\n**请以上负责人登录 pre 环境完成验收，在对应 Issue 评论区发布口令后重试**\n"
+        f"> 产品：`product:pass`\n"
+        f"> 研发：`developer:pass`\n"
     )
     send_webhook(webhook_url, content, at_userids=at_userids)
 

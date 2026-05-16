@@ -21,12 +21,10 @@ from .gitlab_api import GitLabAPI, GitLabError, parse_closing_issue_ids
 from .mr import (
     build_mr_description,
     check_dev_approved,
-    check_product_pass,
+    check_issue_pass,
     get_last_approval_time,
-    get_last_product_pass_time,
     get_last_push_time,
     get_mr_target_branch,
-    has_stale_product_pass,
 )
 from .validator import ValidationError, validate_bug_issue, validate_feature_issue
 from .daily_report import cmd_daily_report
@@ -38,6 +36,7 @@ from .wechat import (
     notify_mr_merged,
     notify_mr_updated,
     notify_release,
+    notify_release_blocked,
     notify_release_merged,
     notify_sync_pre,
 )
@@ -339,17 +338,9 @@ def cmd_mr_create(args: argparse.Namespace) -> None:
                         f"  MR 页面：{ex_mr_url}",
                     )
                 if had_new_commits:
-                    # Check prior gate status so notify can warn about stale approvals
-                    product_was_passed = False
                     dev_was_approved = False
                     try:
-                        ex_comments = api.get_mr_comments(ex_mr_iid)
                         ex_approvals = api.get_mr_approvals(ex_mr_iid)
-                        ex_desc = existing_mr.get("description", "")
-                        product_was_passed = (
-                            check_product_pass(ex_comments, ex_desc)
-                            or has_stale_product_pass(ex_comments, ex_desc)
-                        )
                         dev_was_approved = check_dev_approved(ex_approvals)
                     except GitLabError:
                         pass
@@ -366,7 +357,6 @@ def cmd_mr_create(args: argparse.Namespace) -> None:
                         author_name=issue_author_name,
                         operator=cfg.gitlab_username,
                         reviewer_names=reviewer_names,
-                        product_was_passed=product_was_passed,
                         dev_was_approved=dev_was_approved,
                         at_userids=at_userids,
                     )
@@ -403,8 +393,8 @@ def cmd_mr_create(args: argparse.Namespace) -> None:
     )
 
 
-def _do_mr_check(cfg, api, mr_iid: int) -> tuple[bool, bool, dict, list]:
-    """Returns (product_ok, dev_ok, mr_info, comments)"""
+def _do_mr_check(cfg, api, mr_iid: int) -> tuple[bool, dict, list]:
+    """Returns (dev_ok, mr_info, comments)"""
     try:
         mr = api.get_mr(mr_iid)
     except GitLabError as e:
@@ -426,9 +416,8 @@ def _do_mr_check(cfg, api, mr_iid: int) -> tuple[bool, bool, dict, list]:
         print(f"[错误] {e}", file=sys.stderr)
         sys.exit(1)
 
-    product_ok = check_product_pass(comments, mr.get("description", ""))
     dev_ok = check_dev_approved(approvals)
-    return product_ok, dev_ok, mr, comments
+    return dev_ok, mr, comments
 
 
 def cmd_mr_check(args: argparse.Namespace) -> None:
@@ -436,24 +425,11 @@ def cmd_mr_check(args: argparse.Namespace) -> None:
     api = GitLabAPI(cfg)
     mr_iid = int(args.mr_iid)
 
-    product_ok, dev_ok, mr, comments = _do_mr_check(cfg, api, mr_iid)
+    dev_ok, mr, comments = _do_mr_check(cfg, api, mr_iid)
 
-    mr_desc = mr.get("description", "")
     last_push_time = get_last_push_time(comments)
 
-    # product: check if previously passed but now stale
     stale_dev = False
-    if not product_ok:
-        product_was_stale = has_stale_product_pass(comments, mr_desc)
-        product_label = (
-            "✗ 未通过（最近推送后需重新在评论区回复 product:pass）"
-            if product_was_stale
-            else "✗ 未通过"
-        )
-    else:
-        product_label = "✓ 通过"
-
-    # dev: warn if approved before the last push
     if dev_ok and last_push_time:
         last_approval_time = get_last_approval_time(comments)
         if last_approval_time and last_push_time > last_approval_time:
@@ -462,16 +438,88 @@ def cmd_mr_check(args: argparse.Namespace) -> None:
     if stale_dev:
         dev_label += "  ⚠ 审批后有新提交，建议 Reviewer 重新审阅"
 
-    print(f"\n=== MR !{mr_iid} 双门禁状态 ===")
-    print(f"  产品验收（product:pass）：{product_label}")
-    print(f"  研发 Approval 审批：      {dev_label}")
+    print(f"\n=== MR !{mr_iid} 门禁状态 ===")
+    print(f"  研发 Approval 审批：{dev_label}")
 
-    if product_ok and dev_ok and not stale_dev:
+    if dev_ok and not stale_dev:
         print("\n[结论] 满足合并条件，可执行 ccg gitlab mr merge。")
-    elif product_ok and dev_ok and stale_dev:
+    elif dev_ok and stale_dev:
         print("\n[结论] 门禁已通过，但审批后有新提交，建议 Reviewer 确认后再执行合并。")
     else:
-        print("\n[结论] 尚不满足合并条件，请等待相应审批。")
+        print("\n[结论] 尚不满足合并条件，请等待研发 Approve 审批。")
+
+
+def _check_pre_acceptance(cfg, api) -> tuple[bool, list[dict]]:
+    """Step 9: check all issues linked to merged pre MRs have product:pass and developer:pass in issue comments."""
+    print(f"[gitlab] 查询 {cfg.branch_pre} 上已合并的 MR 及关联 Issue...")
+    pre_mrs = api.get_merged_mrs(cfg.branch_pre)
+
+    issue_merged_at: dict[int, str] = {}
+    for mr in pre_mrs:
+        merged_at: str = mr.get("merged_at", "") or ""
+        for issue_id in parse_closing_issue_ids(mr.get("description", "") or ""):
+            if issue_id not in issue_merged_at or merged_at > issue_merged_at[issue_id]:
+                issue_merged_at[issue_id] = merged_at
+
+    if not issue_merged_at:
+        return True, []
+
+    issue_results: list[dict] = []
+    all_passed = True
+
+    for issue_id, merged_at in issue_merged_at.items():
+        try:
+            issue = api.get_issue(issue_id)
+        except GitLabError as e:
+            print(f"[警告] 获取 Issue #{issue_id} 失败：{e}", file=sys.stderr)
+            continue
+
+        if issue.get("state") != "opened":
+            continue
+
+        reporter = issue.get("author", {})
+        reporter_username: str = reporter.get("username", "")
+        reporter_name: str = reporter.get("name", "") or reporter_username
+
+        assignee = issue.get("assignee", {}) or {}
+        assignee_username: str = assignee.get("username", "")
+        assignee_name: str = assignee.get("name", "") or assignee_username
+
+        issue_url = f"{cfg.gitlab_url.rstrip('/')}/{cfg.gitlab_project_id}/-/issues/{issue_id}"
+
+        try:
+            comments = api.get_issue_comments(issue_id)
+        except GitLabError as e:
+            print(f"[警告] 获取 Issue #{issue_id} 评论失败：{e}", file=sys.stderr)
+            comments = []
+
+        product_passed, product_proxy, product_proxy_user = check_issue_pass(
+            comments, "product:pass", merged_at, reporter_username
+        )
+        developer_passed, developer_proxy, developer_proxy_user = check_issue_pass(
+            comments, "developer:pass", merged_at, assignee_username
+        )
+
+        if not product_passed or not developer_passed:
+            all_passed = False
+
+        issue_results.append({
+            "issue_id": issue_id,
+            "issue_title": issue.get("title", f"Issue #{issue_id}"),
+            "reporter_username": reporter_username,
+            "reporter_name": reporter_name,
+            "assignee_username": assignee_username,
+            "assignee_name": assignee_name,
+            "issue_url": issue_url,
+            "product_passed": product_passed,
+            "product_proxy": product_proxy,
+            "product_proxy_user": product_proxy_user,
+            "developer_passed": developer_passed,
+            "developer_proxy": developer_proxy,
+            "developer_proxy_user": developer_proxy_user,
+        })
+
+    return all_passed, issue_results
 
 
 def cmd_mr_merge(args: argparse.Namespace) -> None:
@@ -479,20 +527,16 @@ def cmd_mr_merge(args: argparse.Namespace) -> None:
     api = GitLabAPI(cfg)
     mr_iid = int(args.mr_iid)
 
-    product_ok, dev_ok, mr, _comments = _do_mr_check(cfg, api, mr_iid)
+    dev_ok, mr, _comments = _do_mr_check(cfg, api, mr_iid)
 
     mr_url: str = mr.get("web_url", "")
     source_branch: str = mr.get("source_branch", "")
     target_branch: str = mr.get("target_branch", "")
     tl_names = _get_reviewer_names(cfg, api)
 
-    if not product_ok:
-        print(
-            f"[错误] 产品验收未通过，请需求提出人在 MR 评论区回复 product:pass 后再合并。\n"
-            f"  评论区直链：{mr_url}#notes",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+    is_hotfix = source_branch.startswith("hotfix_")
+    is_release = (source_branch == cfg.branch_pre and target_branch == cfg.branch_main)
+
     if not dev_ok:
         reviewer_label = "、".join(tl_names) if tl_names else "Reviewer"
         print(
@@ -501,6 +545,46 @@ def cmd_mr_merge(args: argparse.Namespace) -> None:
             file=sys.stderr,
         )
         sys.exit(1)
+
+    # Step 9: pre→main 合并前检查所有 issue 的验收状态
+    if is_release:
+        all_passed, issue_results = _check_pre_acceptance(cfg, api)
+        if not all_passed:
+            failed_at_userids: list[str] = []
+            for r in issue_results:
+                if not r["product_passed"]:
+                    uid = cfg.resolve_wechat_id(r["reporter_username"])
+                    if uid:
+                        failed_at_userids.append(uid)
+                if not r["developer_passed"]:
+                    uid = cfg.resolve_wechat_id(r["assignee_username"])
+                    if uid:
+                        failed_at_userids.append(uid)
+            seen_fail: set[str] = set()
+            failed_at_userids = [u for u in failed_at_userids if u and not (u in seen_fail or seen_fail.add(u))]  # type: ignore[func-returns-value]
+            notify_release_blocked(
+                cfg.wechat_webhook_url,
+                mr_iid=mr_iid,
+                mr_url=mr_url,
+                main_branch=cfg.branch_main,
+                operator=cfg.gitlab_username,
+                issue_results=issue_results,
+                at_userids=failed_at_userids,
+            )
+            print("[错误] pre 环境验收未完成，以下 Issue 缺少验收记录，已通知相关人员：", file=sys.stderr)
+            for r in issue_results:
+                if not r["product_passed"] or not r["developer_passed"]:
+                    pp = "✓" if r["product_passed"] else "✗"
+                    dp = "✓" if r["developer_passed"] else "✗"
+                    print(f"  Issue #{r['issue_id']} 产品:{pp} 研发:{dp}", file=sys.stderr)
+            sys.exit(1)
+
+        proxy_warnings = [r for r in issue_results if r["product_proxy"] or r["developer_proxy"]]
+        for r in proxy_warnings:
+            if r["product_proxy"]:
+                print(f"[警示] Issue #{r['issue_id']} product:pass 由 {r['product_proxy_user']} 代发（负责人：{r['reporter_name']}）")
+            if r["developer_proxy"]:
+                print(f"[警示] Issue #{r['issue_id']} developer:pass 由 {r['developer_proxy_user']} 代发（负责人：{r['assignee_name']}）")
 
     print(f"[gitlab] 合并 MR !{mr_iid}...")
     try:
@@ -544,10 +628,6 @@ def cmd_mr_merge(args: argparse.Namespace) -> None:
 
     print(f"[成功] MR !{mr_iid} 已合并到 {target_branch}。")
 
-    # --- 关 Issue & 通知 ---
-    is_hotfix = source_branch.startswith("hotfix_")
-    is_release = (source_branch == cfg.branch_pre and target_branch == cfg.branch_main)
-
     if is_hotfix and target_branch == cfg.branch_main:
         # 热修：关闭单个 Issue
         issue_id = get_issue_id_from_branch(source_branch)
@@ -572,13 +652,8 @@ def cmd_mr_merge(args: argparse.Namespace) -> None:
         )
 
     elif is_release:
-        # Release：关闭 pre 上所有已合并的 feature Issue
-        print(f"[gitlab] 查询 {cfg.branch_pre} 上已合并的 MR...")
-        pre_mrs = api.get_merged_mrs(cfg.branch_pre)
-        issue_ids = []
-        for pre_mr in pre_mrs:
-            issue_ids.extend(parse_closing_issue_ids(pre_mr.get("description", "") or ""))
-        issue_ids = list(dict.fromkeys(issue_ids))  # 去重保序
+        # Release：关闭所有关联 Issue
+        issue_ids = [r["issue_id"] for r in issue_results]
 
         closed_issues: list[dict] = []
         author_usernames: list[str] = []
@@ -598,14 +673,13 @@ def cmd_mr_merge(args: argparse.Namespace) -> None:
             except GitLabError as e:
                 print(f"[警告] 处理 Issue #{iid} 失败：{e}", file=sys.stderr)
 
-        at_userids = (
+        at_userids_release = (
             cfg.resolve_wechat_ids(list(dict.fromkeys(author_usernames)))
             + cfg.resolve_wechat_ids([cfg.gitlab_username])
             + cfg.at_tl_list
         )
-        # 去重
-        seen: set[str] = set()
-        at_userids = [u for u in at_userids if u and not (u in seen or seen.add(u))]  # type: ignore[func-returns-value]
+        seen_rel: set[str] = set()
+        at_userids_release = [u for u in at_userids_release if u and not (u in seen_rel or seen_rel.add(u))]  # type: ignore[func-returns-value]
 
         notify_release_merged(
             cfg.wechat_webhook_url,
@@ -614,15 +688,34 @@ def cmd_mr_merge(args: argparse.Namespace) -> None:
             main_branch=cfg.branch_main,
             closed_issues=closed_issues,
             operator=cfg.gitlab_username,
-            at_userids=at_userids,
+            at_userids=at_userids_release,
         )
 
     else:
-        # feature → pre：只通知，不关 Issue（未上线）
-        at_userids = cfg.resolve_wechat_ids([cfg.gitlab_username]) + cfg.at_tl_list
+        # feature → pre：通知产品和研发前往 pre 验收
+        issue_id = get_issue_id_from_branch(source_branch) or 0
+        issue_reporter_name = ""
+        issue_link = ""
+        reporter_wechat_ids: list[str] = []
+        if issue_id:
+            try:
+                issue = api.get_issue(issue_id)
+                reporter = issue.get("author", {})
+                reporter_username: str = reporter.get("username", "")
+                issue_reporter_name = reporter.get("name", "") or reporter_username
+                issue_link = f"{cfg.gitlab_url.rstrip('/')}/{cfg.gitlab_project_id}/-/issues/{issue_id}"
+                reporter_wechat_ids = cfg.resolve_wechat_ids([reporter_username])
+            except GitLabError:
+                pass
+
+        seen_pre: set[str] = set()
+        at_userids_pre = [
+            u for u in cfg.resolve_wechat_ids([cfg.gitlab_username]) + reporter_wechat_ids + cfg.at_tl_list
+            if u and not (u in seen_pre or seen_pre.add(u))  # type: ignore[func-returns-value]
+        ]
         notify_mr_merged(
             cfg.wechat_webhook_url,
-            issue_id=0,
+            issue_id=issue_id,
             mr_iid=mr_iid,
             target_branch=target_branch,
             mr_url=mr_url,
@@ -630,7 +723,9 @@ def cmd_mr_merge(args: argparse.Namespace) -> None:
             pre_branch=cfg.branch_pre,
             main_branch=cfg.branch_main,
             tl_names=tl_names,
-            at_userids=at_userids,
+            at_userids=at_userids_pre,
+            issue_reporter_name=issue_reporter_name,
+            issue_link=issue_link,
         )
 
 

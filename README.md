@@ -14,7 +14,8 @@
 - 自动校验 Issue 格式，防止信息不完整就开工
 - 自动创建符合命名规范的 Git 分支
 - 自动创建 MR（Merge Request）并生成标准描述
-- 双门禁合并：必须同时满足产品验收 + 研发审批
+- MR 合并前强制研发 Approve 审批
+- pre 环境验收双确认：产品和研发分别在 Issue 评论区发布验收口令，缺一不可才允许上线
 - 全程企业微信 @ 对应责任人，明确下一步动作
 
 ---
@@ -95,8 +96,8 @@ GITLAB_USERNAME=XXXXXX                   # 自己的 GitLab 用户名
 
 | 角色 | 职责 |
 |------|------|
-| **产品经理**（Issue 提出人） | 在 GitLab 创建 Issue，在 MR 评论区回复验收口令 |
-| **研发**（开发者） | 执行所有 `ccg` 命令，推进代码开发和合并 |
+| **产品经理**（Issue 提出人/reporter） | 在 GitLab 创建 Issue；在 MR 评论区回复知悉；在 pre 环境验收后于 Issue 评论区发布 `product:pass` |
+| **研发**（开发者/assignee） | 执行所有 `ccg` 命令，推进代码开发和合并；在 pre 环境验收后于 Issue 评论区发布 `developer:pass` |
 | **Reviewer**（代码审批人，通常为 TL） | 在 GitLab MR 页面点击 Approve 完成代码审批 |
 
 ---
@@ -132,22 +133,24 @@ flowchart TD
     B -. 🤖企微自动 .-> bN["「需求开发开始」\n@产品 @研发"]:::bot
     B -->|"✓ 格式合规"| C["👨‍💻 研发\nccg gitlab commit（可多次）"]
     C --> D["👨‍💻 研发\nccg gitlab mr create"]
-    D -. 🤖企微自动 .-> dN["「MR 待评审验收」\n@产品 @Reviewer"]:::bot
-    D --> E["🧑‍💼 产品\n评论区回复 product:pass"]
+    D -. 🤖企微自动 .-> dN["「MR 待评审」\n@产品（知悉）@Reviewer（审批）"]:::bot
+    D --> E["🧑‍💼 产品\n评论区回复「已知悉本次变更」"]
     D --> F["👀 Reviewer\nGitLab 点击 Approve"]
-    E -. 👤人工 .-> eN["建议：产品在企微\n告知研发验收已通过"]:::human
+    E -. 👤仅作知悉，不阻断合并 .-> eN["产品无需等待研发，\n知悉即可"]:::human
     F -. 👤人工 .-> fN["建议：Reviewer 在企微\n告知研发已 Approve"]:::human
-    E --> G{"双门禁通过？"}
-    F --> G
-    G -->|"✗ 未通过"| E
+    F --> G{"研发 Approve\n通过？"}
+    G -->|"✗ 未通过"| F
     G -->|"✓ 通过"| H["👨‍💻 研发\nccg gitlab mr merge → pre"]
-    H -. 🤖企微自动 .-> hN["「MR 已合并到 pre」\n@研发 提示验收步骤"]:::bot
-    H --> I["👨‍💻 研发\npre 环境验收"]
+    H -. 🤖企微自动 .-> hN["「MR 已合并到 pre」\n@产品 @研发 各自验收并发口令"]:::bot
+    H --> I["🧑‍💼 产品 + 👨‍💻 研发\npre 环境验收\nIssue 评论区各发 pass 口令"]
+    I -. 🤖企微自动（如验收缺失则阻断） .-> iN["上线合并时自动检查\n缺失则通知并拒绝"]:::bot
     I --> J["👨‍💻 研发\nccg gitlab mr release"]
     J -. 🤖企微自动 .-> jN["「上线 MR 已创建」\n@Reviewer @研发"]:::bot
     J --> K["👀 Reviewer\nGitLab 点击 Approve"]
     K -. 👤人工 .-> kN["建议：Reviewer 在企微\n告知研发可执行上线合并"]:::human
-    K --> L["👨‍💻 研发\nccg gitlab mr merge → main"]
+    K --> L["👨‍💻 研发\nccg gitlab mr merge → main\n⚑ 自动检查所有 Issue 验收状态"]
+    L -->|"✗ 有 Issue 未完成验收"| lFail["🤖企微自动\n按 Issue 列出未完成项\n@ 对应负责人"]:::bot
+    lFail -. 补充验收口令后重新执行 .-> L
     L -. 🤖企微自动 .-> lN["「上线完成」\n@所有产品 线上验收"]:::bot
     L --> M["🧑‍💼 产品\n线上验收"]
     M -. 👤人工 .-> mN["发现问题：提 Bug Issue\n并在企微或当面告知研发"]:::human
@@ -182,7 +185,7 @@ flowchart TD
 
 **完成标志：** Issue 创建成功，获取到 Issue ID（URL 中的数字，例如 `#123`）
 
-> **下一步（产品）：** Issue 就绪后，在企业微信或当面告知对应研发，说明需求已创建（附上 Issue 链接）。研发收到通知后才会执行 `ccg gitlab feature start`。
+> **下一步（产品）：** Issue 就绪后，在企业微信或当面告知对应研发，说明需求已创建（附上 Issue 链接）。
 
 ---
 
@@ -287,40 +290,38 @@ ccg gitlab mr create
 4. 自动推送分支到远端
 5. 在 GitLab 创建 MR，标题为：`[需求] #123 【需求】用户个人中心增加消费记录入口`
 6. MR 合并目标：**`pre` 分支**
-7. MR 描述自动填充（包含改动说明、验收指引、产品和研发的操作说明）
+7. MR 描述自动填充（包含改动说明、知悉指引、研发操作说明）
 8. 自动将配置中的 Reviewer 设置为 MR 审阅人
 9. 向企业微信群发送通知
 
-> **MR 已存在时（补推代码）：** 如果该分支已有未合并的 MR，工具会跳过创建、直接推送代码。若本次推送包含新提交，会发送「MR 代码已更新」通知，提醒产品和 Reviewer 重新审阅；若代码无变更（Everything up-to-date），则仅打印提示，不发送企微通知。
+> **MR 已存在时（补推代码）：** 如果该分支已有未合并的 MR，工具会跳过创建、直接推送代码。若本次推送包含新提交，会发送「MR 代码已更新」通知，提醒产品和 Reviewer 重新查看；若代码无变更，则仅打印提示，不发送企微通知。
 
 **企业微信收到的消息（首次创建 MR）：**
 
 ```
-### MR 待评审验收
+### MR 待评审
 > MR !45：[需求] #123 xxx
 > 关联 Issue：#123
 > 合并目标：pre
 > 操作人：wujing03
 > 查看 MR（链接）
 
-下一步 · xxx（需求提出人/产品）
+下一步 · xxx（需求提出人）
 > 1. 点击上方「查看 MR」了解本次改动内容
-> 2. 确认功能符合验收标准后，在评论区回复：
->    - 验收通过：product:pass
->    - 需要修改：product:reject 具体原因
+> 2. 如无异议，请在评论区回复：`已知悉本次变更`
 
 下一步 · Reviewer
 > 1. 打开 MR 页面审阅代码改动
 > 2. 在页面右侧点击「Approve」完成审批
 
 下一步 · wujing03（研发）
-> 1. 随时查看双门禁状态：
+> 1. 随时查看审批状态：
 >    ccg gitlab mr check 45
-> 2. 双门禁（产品验收 + 研发审批）均通过后执行合并：
+> 2. 研发 Approve 通过后执行合并：
 >    ccg gitlab mr merge 45
 ```
 
-**企业微信收到的消息（MR 已存在，补推代码，且双门禁均已通过）：**
+**企业微信收到的消息（MR 已存在，补推代码，且 Reviewer 已 Approve）：**
 
 ```
 ### MR 代码已更新
@@ -330,45 +331,36 @@ ccg gitlab mr create
 > 查看 MR（链接）
 
 ⚠ 注意：本次推送使以下已通过的门禁失效
-> - xxx 的验收（product:pass）基于旧代码，需重新验收
 > - 张三、李四 的 Approve 基于旧代码，需重新审批
 
-下一步 · xxx（需求提出人/产品）
-> 代码有新改动，请确认功能是否符合验收标准。
-> 如需重新验收，在评论区回复：
->    - 验收通过：product:pass
->    - 需要修改：product:reject 具体原因
+下一步 · xxx（需求提出人）
+> 代码有新改动，请查看改动内容。
+> 如无异议，请在评论区回复：`已知悉本次变更`
 
 下一步 · 张三、李四
 > 代码有新改动，请重新审阅并完成 Approve。
 > 打开 MR 页面（链接）在右侧点击「Approve」
 
 下一步 · wujing03（研发）
-> 1. 随时查看双门禁状态：ccg gitlab mr check 45
-> 2. 双门禁均通过后执行合并：ccg gitlab mr merge 45
+> 1. 随时查看审批状态：ccg gitlab mr check 45
+> 2. 研发 Approve 通过后执行合并：ccg gitlab mr merge 45
 ```
-
-> **说明：** 若推送前尚无产品验收或 Approve，则不会出现 `⚠ 注意` 段落，消息内容与上方相同但去掉该警告块。
 
 **@ 对象：** Issue 提出人（产品）、TL
 
 ---
 
-### 步骤 5：产品经理 — MR 验收
+### 步骤 5：产品经理 — MR 知悉
 
-**操作位置：** 企业微信消息中点击「查看 MR」链接 → 进入 GitLab MR 页面
+**操作位置：** GitLab MR 页面评论区
 
 **操作步骤：**
 1. 阅读 MR 描述中的「改动说明」，了解本次开发内容
-2. 如有必要可查看「Changes」tab 了解代码层面变动
-3. 在 MR 页面下方评论区（Notes）回复验收结论：
-   - **通过：** 在评论框输入 `product:pass` 并提交
-   - **驳回：** 在评论框输入 `product:reject 具体原因` 并提交
+2. 如无异议，在 MR 页面下方评论区回复：`已知悉本次变更`
 
 > **注意：**
-> - `product:pass` 大小写不敏感。
-> - 必须在**最近一次代码推送之后**回复才算有效；推送前的旧验收记录会被自动忽略，需重新回复。
-> - 如果研发补推了新代码（`ccg gitlab mr create` 提示「MR 代码已更新」），之前的 `product:pass` 自动失效，需重新验收。
+> - 此步骤为**信息同步**，不阻断 MR 合并。研发无需等待产品回复即可在 Approve 通过后执行合并。
+> - **真正的功能验收在步骤 8（pre 环境）进行**，产品需在 pre 环境逐项验证后于 Issue 评论区发布 `product:pass`。
 
 ---
 
@@ -381,14 +373,14 @@ ccg gitlab mr create
 2. 审阅「Changes」tab 中的代码变更
 3. 在页面右侧「Reviewers」或顶部操作区点击 **「Approve」** 按钮
 
-> - 至少需要 1 名成员完成 Approve，系统才判定审批通过。研发在双门禁均通过后执行合并命令。
-> - Approval 状态直接读取 GitLab 实时数据。若项目开启了「Reset approvals on push」，推送新代码后 GitLab 会自动清除审批，Reviewer 需重新 Approve；若未开启该设置，推送后审批状态保留，`mr check` 会显示 `⚠` 提示建议重新确认。
+> - 至少需要 1 名成员完成 Approve，系统才判定审批通过。
+> - 若项目开启了「Reset approvals on push」，推送新代码后 GitLab 会自动清除审批，Reviewer 需重新 Approve；若未开启，`mr check` 会显示 `⚠` 提示建议重新确认。
 
 ---
 
 ### 步骤 7：研发 — 合并 MR（feature → pre）
 
-**前提：** 产品已在评论区回复 `product:pass` && 研发已完成 Approve
+**前提：** Reviewer 已完成 GitLab Approve
 
 **执行命令：**
 
@@ -402,46 +394,59 @@ ccg gitlab mr merge 45
 ```
 
 **工具自动完成：**
-1. 检查产品验收状态（扫描 MR 评论，查找 `product:pass`）
-2. 检查研发审批状态（查询 Approval 接口）
-3. 如任意一项未通过，报错退出，提示对应责任人
-4. 双门禁均通过后，执行 GitLab MR 合并
-5. MR 合并到 `pre` 分支（此时 Issue 不关闭，功能尚未上线）
-6. 向企业微信群发送通知
+1. 检查研发审批状态（查询 Approval 接口）
+2. 审批未通过则报错退出，提示联系 Reviewer
+3. 执行 GitLab MR 合并到 `pre` 分支（此时 Issue 不关闭，功能尚未上线）
+4. 向企业微信群发送通知，通知产品和研发前往 pre 验收
 
 **企业微信收到的消息：**
 
 ```
 ### MR 已合并
 > MR !45 已成功合并到 pre
+> 关联 Issue：#123
 > 操作人：wujing03
 > 查看 MR（链接）
 
-下一步 · wujing03
+下一步 · xxx（产品）
 > 1. 登录 pre 环境，按 Issue #123 验收标准逐项验证功能
-> 2. 测试通过后创建上线 MR：ccg gitlab mr release
-> 3. 等待 张三、李四 审批后执行合并命令上线
+> 2. 验收通过后，在 Issue 评论区回复：product:pass
+
+下一步 · wujing03（研发）
+> 1. 登录 pre 环境，按 Issue #123 验收标准逐项验证功能
+> 2. 验收通过后，在 Issue 评论区回复：developer:pass
 ```
 
-**@ 对象：** 开发者、TL
+**@ 对象：** 产品（Issue reporter）、研发（开发者）、TL
 
 ---
 
-### 步骤 8：研发 — 在 pre 环境验收
+### 步骤 8：产品 + 研发 — 在 pre 环境验收
 
-**操作位置：** pre 测试环境
+**操作位置：** pre 测试环境 + GitLab Issue 评论区
 
-**操作步骤：**
+**产品操作步骤：**
 1. 登录 pre 环境
 2. 按 Issue 中「验收标准」逐项验证功能
+3. 验收通过后，在 **GitLab Issue 评论区**回复：`product:pass`
 
-> 如发现 Bug，直接在 pre 上修复后重新提交，无需走新的需求流程。
+**研发操作步骤：**
+1. 登录 pre 环境
+2. 按 Issue 中「验收标准」逐项验证功能
+3. 验收通过后，在 **GitLab Issue 评论区**回复：`developer:pass`
+
+> **注意：**
+> - `product:pass` 和 `developer:pass` 发在 **Issue 评论区**，不是 MR 评论区。
+> - 两者均需在该 Issue 关联的 MR **最后一次合入 pre** 之后发布才有效；之前的旧记录会被忽略。
+> - 如果发现 Bug，直接在 pre 上修复后重新提交，重新合入 pre 后需重新发布验收口令。
+> - 如果一个需求有多名研发，任意一人发布 `developer:pass` 即可；但非 Issue assignee 代发时，上线合并时企微会出现警示。
+> - 产品由 Issue reporter 发布为正常；其他产品代发时，企微同样会出现警示。
 
 ---
 
 ### 步骤 9：研发 — 创建上线 MR（pre → main）
 
-pre 验收通过后执行：
+产品和研发均完成 pre 验收后执行：
 
 ```bash
 ccg gitlab mr release
@@ -493,12 +498,40 @@ ccg gitlab mr merge 46
 
 **工具自动完成：**
 1. 检查 TL 的 Approve 状态
-2. 执行合并，`pre` → `main`
-3. 扫描 `pre` 上所有已合并 MR，解析其中的 `Closes #xxx` 引用
-4. **自动关闭**本次上线涉及的所有 Issue
-5. 向企业微信群发送上线完成通知
+2. **检查本次上线涉及的所有 Issue 是否完成 pre 验收**（见下方说明）
+3. 验收检查通过后，执行合并 `pre` → `main`
+4. 扫描 `pre` 上所有已合并 MR，解析其中的 `Closes #xxx` 引用
+5. **自动关闭**本次上线涉及的所有 Issue
+6. 向企业微信群发送上线完成通知
 
-**企业微信收到的消息：**
+**Step 9 验收检查逻辑：**
+- 找出所有通过 `Closes #xxx` 关联到 pre MR 的、**当前仍为 opened 状态**的 Issue
+- 对每个 Issue，以其关联 MR **最后一次合入 pre 的时间**为基准
+- 检查该 Issue 评论区在基准时间之后是否存在 `product:pass`（产品）和 `developer:pass`（研发）
+- 任意 Issue 缺失其中一项 → 拒绝合并，向企微发送阻断通知
+
+**企业微信收到的消息（验收未完成，阻断上线）：**
+
+```
+### pre → main 上线被阻止
+> MR !46 合入主干失败，以下 Issue 未完成 pre 环境验收
+> 操作人：wujing03
+> 查看 MR（链接）
+
+**Issue #123**：【需求】用户个人中心增加消费记录入口（查看）
+> 产品验收（product:pass）：✗ 未通过  负责人：xxx
+> 研发验收（developer:pass）：✓ 已通过
+
+**Issue #124**：【需求】另一个需求（查看）
+> 产品验收（product:pass）：✓ 已通过
+> 研发验收（developer:pass）：✗ 未通过  负责人：yyy
+
+请以上负责人登录 pre 环境完成验收，在对应 Issue 评论区发布口令后重试
+> 产品：product:pass
+> 研发：developer:pass
+```
+
+**企业微信收到的消息（验收通过，上线完成）：**
 
 ```
 ### pre → main 上线完成
@@ -514,7 +547,7 @@ ccg gitlab mr merge 46
 > 如发现问题请及时提 Bug Issue（标题以【Bug】开头）
 ```
 
-**@ 对象：** 所有相关需求的提出人（产品）、开发者、TL
+**@ 对象：** 验收未完成时只 @ 对应 Issue 的责任人；上线完成时 @ 所有相关需求的提出人（产品）、开发者、TL
 
 ---
 
@@ -547,14 +580,13 @@ flowchart TD
     B -. 🤖企微自动 .-> bN["「🚨 热修开始」\n@产品 @研发 @TL"]:::bot
     B -->|"✓ 格式合规"| C["👨‍💻 研发\nccg gitlab commit（可多次）"]
     C --> D["👨‍💻 研发\nccg gitlab mr create → main"]
-    D -. 🤖企微自动 .-> dN["「MR 待评审验收」\n@产品 @Reviewer"]:::bot
-    D --> E["🧑‍💼 产品\n评论区回复 product:pass"]
+    D -. 🤖企微自动 .-> dN["「MR 待评审」\n@产品（知悉）@Reviewer（审批）"]:::bot
+    D --> E["🧑‍💼 产品\n评论区回复「已知悉本次变更」"]
     D --> F["👀 Reviewer\nGitLab 点击 Approve"]
-    E -. 👤人工 .-> eN["建议：产品在企微\n告知研发验收已通过"]:::human
+    E -. 👤仅作知悉，不阻断合并 .-> eN[""]:::human
     F -. 👤人工 .-> fN["建议：Reviewer 在企微\n告知研发已 Approve"]:::human
-    E --> G{"双门禁通过？"}
-    F --> G
-    G -->|"✗ 未通过"| E
+    F --> G{"研发 Approve\n通过？"}
+    G -->|"✗ 未通过"| F
     G -->|"✓ 通过"| H["👨‍💻 研发\nccg gitlab mr merge → main\nIssue 自动关闭"]
     H -. 🤖企微自动 .-> hN["「MR 已合并」\n@研发 提示同步 pre"]:::bot
     H --> I["👨‍💻 研发\nccg gitlab mr sync-pre"]
@@ -595,7 +627,7 @@ flowchart TD
 （P0 崩溃 / P1 核心功能不可用 / P2 次要功能异常 / P3 体验问题）
 ```
 
-> **下一步（产品）：** Bug Issue 创建后，立即在企业微信或当面告知对应研发，并附上 Issue 链接。线上 Bug 紧急，请同时通知 TL。研发收到通知后执行 `ccg gitlab hotfix start`。
+> **下一步（产品）：** Bug Issue 创建后，立即在企业微信或当面告知对应研发，并附上 Issue 链接。线上 Bug 紧急，请同时通知 TL。
 
 ---
 
@@ -621,42 +653,9 @@ ccg gitlab hotfix start 456 --base release/v2.1
 4. 创建并切换到热修分支：`hotfix_456_消费记录页面数据加载失败`
 5. 向企业微信群发送通知（会额外 @ TL）
 
-**企业微信收到的消息（Issue 格式不合规时）：**
-
-```
-### Bug Issue 格式不合规
-> Issue #456：【Bug】消费记录页面数据加载失败
-> Bug 提出人：xxx（产品）
-> 认领研发：wujing03
-> 查看 Issue（链接）
-
-不合规详情
-> 缺少必填小节：复现步骤、严重等级
-
-下一步 · xxx（Bug 提出人）
-> 请按标准模板补充以上小节内容：Issue #456（链接）
-> 完成后通知研发重新认领
-```
-
 **@ 对象（格式不合规时）：** Issue 提出人（产品）
 
-**企业微信收到的消息（格式合规，正常开始热修）：**
-
-```
-### 🚨 线上Bug热修开始
-> Issue #456：【Bug】消费记录页面数据加载失败
-> 问题提出人：xxx
-> 开发者：wujing03
-> 分支：`hotfix_456_消费记录页面数据加载失败`（基于 `main`）
-> 查看 Issue（链接）
-
-下一步 · wujing03
-> 1. 当前已切换到分支，直接开始修复
-> 2. 修复完成后提交代码：ccg gitlab commit "修复说明"
-> 3. 推送分支并创建 MR（直接合入 main）：ccg gitlab mr create
-```
-
-**@ 对象：** Issue 提出人、开发者、**TL（热修必须通知 TL）**
+**@ 对象（正常开始热修）：** Issue 提出人、开发者、**TL（热修必须通知 TL）**
 
 ---
 
@@ -678,14 +677,14 @@ ccg gitlab mr create
 - MR 目标分支是 **`main`**（热修不经过 pre，直接上线）
 - MR 标题前缀为 `[Bug热修]`
 
-**企业微信通知内容**与需求流程步骤 4 格式相同，但合并目标显示为 `main`。
+企业微信通知内容与需求流程步骤 4 格式相同，但合并目标显示为 `main`。
 
 ---
 
-### 步骤 5：产品验收 + Reviewer 审批
+### 步骤 5：产品知悉 + Reviewer 审批
 
 与需求流程步骤 5、6 相同：
-- **产品：** 在 MR 评论区回复 `product:pass`
+- **产品：** 在 MR 评论区回复 `已知悉本次变更`（信息同步，不阻断合并）
 - **Reviewer：** 在 GitLab MR 页面点击「Approve」
 
 ---
@@ -697,7 +696,7 @@ ccg gitlab mr merge <mr_iid>
 ```
 
 **工具自动完成：**
-1. 检查双门禁（`product:pass` + Approve）
+1. 检查研发 Approve 状态
 2. 合并到 `main`
 3. **自动关闭**对应 Bug Issue
 4. 向企业微信群发送通知
@@ -731,23 +730,6 @@ ccg gitlab mr sync-pre
 1. 创建 MR：`main` → `pre`，标题为 `[SyncPre] 2026-05-15 main → pre`
 2. 向企业微信群发送通知，告知 TL 审批同步 MR
 
-**企业微信收到的消息：**
-
-```
-### main → pre 同步 MR 已创建
-> MR !48 热修代码待同步到 pre
-> 操作人：wujing03
-> 查看 MR（链接）
-
-下一步 · 张三、李四
-> 1. 打开 MR 页面确认热修内容与 main 一致
-> 2. 在页面右侧点击「Approve」完成审批
-
-下一步 · wujing03
-> 张三、李四 审批通过后，执行以下命令完成同步：
-> ccg gitlab mr merge 48
-```
-
 ---
 
 ### 步骤 8：TL 审批 + 研发执行同步合并
@@ -762,7 +744,7 @@ ccg gitlab mr merge 48
 
 ## 七、辅助命令
 
-### 检查 MR 双门禁状态（不执行合并）
+### 检查 MR 审批状态（不执行合并）
 
 当不确定 MR 是否满足合并条件时，可先查询：
 
@@ -770,45 +752,31 @@ ccg gitlab mr merge 48
 ccg gitlab mr check <mr_iid>
 ```
 
-**示例输出（双门禁通过，可合并）：**
+**示例输出（审批通过，可合并）：**
 ```
-=== MR !45 双门禁状态 ===
-  产品验收（product:pass）：✓ 通过
-  研发 Approval 审批：      ✓ 通过
+=== MR !45 门禁状态 ===
+  研发 Approval 审批：✓ 通过
 
 [结论] 满足合并条件，可执行 ccg gitlab mr merge。
 ```
 
-**示例输出（产品未验收）：**
+**示例输出（审批未通过）：**
 ```
-=== MR !45 双门禁状态 ===
-  产品验收（product:pass）：✗ 未通过
-  研发 Approval 审批：      ✓ 通过
+=== MR !45 门禁状态 ===
+  研发 Approval 审批：✗ 未通过
 
-[结论] 尚不满足合并条件，请等待相应审批。
-```
-
-**示例输出（产品验收后研发又补推了代码）：**
-```
-=== MR !45 双门禁状态 ===
-  产品验收（product:pass）：✗ 未通过（最近推送后需重新在评论区回复 product:pass）
-  研发 Approval 审批：      ✓ 通过
-
-[结论] 尚不满足合并条件，请等待相应审批。
+[结论] 尚不满足合并条件，请等待研发 Approve 审批。
 ```
 
 **示例输出（Approve 后又补推代码且项目未开启自动重置）：**
 ```
-=== MR !45 双门禁状态 ===
-  产品验收（product:pass）：✓ 通过
-  研发 Approval 审批：      ✓ 通过  ⚠ 审批后有新提交，建议 Reviewer 重新审阅
+=== MR !45 门禁状态 ===
+  研发 Approval 审批：✓ 通过  ⚠ 审批后有新提交，建议 Reviewer 重新审阅
 
 [结论] 门禁已通过，但审批后有新提交，建议 Reviewer 确认后再执行合并。
 ```
 
-> **说明：**
-> - `product:pass` 必须在最近一次代码推送**之后**回复才有效，之前的旧记录工具会自动忽略。
-> - Approval 状态直接读取 GitLab 实时数据。若项目开启了「Reset approvals on push」，GitLab 推代码后会自动清除审批，工具直接判为未通过；若未开启，工具会显示 `⚠` 提示建议 Reviewer 重新确认。
+> Approval 状态直接读取 GitLab 实时数据。若项目开启了「Reset approvals on push」，推代码后 GitLab 会自动清除审批；若未开启，工具会显示 `⚠` 提示建议 Reviewer 重新确认。
 
 ---
 
@@ -876,28 +844,6 @@ LLM_MODEL=gpt-4o-mini                    # 默认值
 WECHAT_DAILY_REPORT_WEBHOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=yyy
 ```
 
-### 企业微信效果示例
-
-```
-### 📊 团队日报（过去24小时）
-
-**需求动态**
-> 新提出：2 个
-> - #45 用户中心增加消费记录（提出人：Alice，执行者：张三）
-> - #46 【Bug】登录超时问题（提出人：Bob，待分配）
-> 已完成：1 个
-> - #43 首页改版（执行：张三）
-> 进行中：5 个
-> - #44 支付流程优化（提出人：Alice，执行者：李四）
-> - #47 国际化多语言（提出人：Bob，待分配）
-> - ...（共 5 个）
-
-**代码提交**
-> 共 12 次提交，+320 / -45 行
-> - 张三：8 次，+210 / -30 行（#43 首页改版）
-> - 李四：4 次，+110 / -15 行（#44 支付流程优化）
-```
-
 ### 配合定时任务自动发送
 
 在服务器上配置 cron，每天 18:00 自动执行：
@@ -917,15 +863,15 @@ WECHAT_DAILY_REPORT_WEBHOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send
 | `ccg gitlab hotfix start <issue_id> [--base 分支]` | Bug 热修开始，默认从 main checkout | 研发 |
 | `ccg gitlab commit "说明"` | 开发过程中提交代码 | 研发 |
 | `ccg gitlab mr create` | 开发完成，创建 MR | 研发 |
-| `ccg gitlab mr check <mr_iid>` | 查看 MR 双门禁状态 | 研发 |
-| `ccg gitlab mr merge <mr_iid>` | 执行合并（需双门禁通过） | 研发 |
-| `ccg gitlab mr release` | pre 验收通过，创建上线 MR | 研发 |
+| `ccg gitlab mr check <mr_iid>` | 查看 MR 研发审批状态 | 研发 |
+| `ccg gitlab mr merge <mr_iid>` | 执行合并（需研发 Approve 通过） | 研发 |
+| `ccg gitlab mr release` | 创建上线 MR（pre → main） | 研发 |
 | `ccg gitlab mr sync-pre` | 热修后同步 main 到 pre | 研发 |
 | `ccg gitlab daily-report [--hours N] [--no-llm] [--dry-run]` | 生成并发送每日工作日报 | TL / 管理员 |
 
 ---
 
-## 九、Issue 格式模板
+## 十、Issue 格式模板
 
 ### 需求 Issue 模板
 
@@ -971,7 +917,7 @@ WECHAT_DAILY_REPORT_WEBHOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send
 
 ---
 
-## 十、常见问题
+## 十一、常见问题
 
 **Q：执行 `feature start` / `hotfix start` 报错「Issue格式不合规」怎么办？**
 
@@ -1015,34 +961,19 @@ ccg gitlab mr create
 
 **Q：执行 `mr create` 提示「分支已有 MR，本次推送已更新其代码」是什么意思？**
 
-A：该分支已存在未合并的 MR，本次新提交已自动推送到远端并更新了该 MR 的代码。工具会输出已有 MR 的页面链接，并自动向企业微信群发送「MR 代码已更新」通知，提醒产品和 Reviewer 重新审阅。
-
-如果推送前已有产品验收或研发 Approve，企微通知中还会附带 **⚠ 注意** 警告，明确指出哪一方的操作基于旧代码、需要重新进行。无需任何额外操作，等待双门禁重新通过后执行合并即可。
-
-**Q：执行 `mr create` 提示「分支已有 MR，且代码无变更，无需重新创建」是什么意思？**
-
-A：本次执行时本地与远端代码完全一致（没有新提交），工具跳过创建并打印提示，**不会发送企微通知**，避免骚扰产品和 Reviewer。如需更新代码，先执行 `ccg gitlab commit "说明"` 再重新执行 `mr create`。
-
-**Q：执行任意命令报错「当前处于 rebase 冲突状态」怎么办？**
-
-A：`git pull --rebase` 遇到冲突后会暂停，需手动解决后继续：
-```bash
-git status                    # 查看冲突文件
-# 手动编辑冲突文件，解决所有冲突标记
-git add <冲突文件>
-git rebase --continue         # 继续 rebase
-# 如需放弃 rebase 回到操作前状态：
-git rebase --abort
-```
-rebase 完成后重新执行原命令即可。
-
-**Q：执行 `mr merge` 报错「产品验收未通过」怎么办？**
-
-A：产品还未在 MR 评论区回复 `product:pass`。错误信息中会附上 MR 评论区直链，发给产品直接操作即可。
+A：该分支已存在未合并的 MR，本次新提交已自动推送并更新了该 MR 的代码。工具会自动向企业微信群发送「MR 代码已更新」通知，提醒产品和 Reviewer 重新查看。如果 Reviewer 已 Approve，企微通知中还会附带 **⚠ 注意** 警告，说明需要重新 Approve。
 
 **Q：执行 `mr merge` 报错「研发 Approval 审批未通过」怎么办？**
 
 A：错误信息中会指出具体的 Reviewer 姓名和 MR 页面链接，请联系对应 Reviewer 在 GitLab MR 页面点击「Approve」后再重新执行。
+
+**Q：执行 `mr merge`（上线合并）报错「pre 环境验收未完成」怎么办？**
+
+A：企微群会收到阻断通知，按 Issue 列出哪些是产品未 pass、哪些是研发未 pass，并 @ 对应负责人。相关人员登录 pre 环境完成验收后，在 **GitLab Issue 评论区**（不是 MR 评论区）发布对应口令（`product:pass` 或 `developer:pass`），再重新执行 `ccg gitlab mr merge <mr_iid>` 即可。
+
+**Q：product:pass / developer:pass 发在哪里？**
+
+A：发在 **GitLab Issue 评论区**，不是 MR 评论区。进入对应 Issue 页面，在下方评论框输入口令并提交即可。
 
 **Q：执行 `mr merge` 报错「分支无法合并」（406）怎么办？**
 

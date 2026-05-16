@@ -19,9 +19,7 @@ Closes #{issue_id}
 
 ---
 ### 产品经理
-请勿编辑上方内容，仅在评论区回复验收口令：
-通过：product:pass
-驳回：product:reject 具体问题
+请勿编辑上方内容，请在评论区回复「已知悉本次变更」表示已了解本次改动。
 
 ### 研发
 请在GitLab原生页面完成【Approval审批】，勿修改MR文本"""
@@ -43,64 +41,36 @@ def build_mr_description(
     )
 
 
-def check_product_pass(comments: list[dict], mr_description: str = "") -> bool:
-    _PASS_RE = re.compile(r"product:pass", re.IGNORECASE)
-    desc = mr_description.strip()
-    # Only a product:pass AFTER the most recent push counts; earlier ones are stale.
-    last_push = get_last_push_time(comments)
-    for note in comments:
-        if note.get("system"):
-            continue
-        body: str = note.get("body", "")
-        if desc and body.strip() == desc:
-            continue
-        if _PASS_RE.search(body):
-            created_at = note.get("created_at", "")
-            if last_push is None or (created_at and created_at > last_push):
-                return True
-    return False
-
-
 def check_dev_approved(approvals: dict) -> bool:
     approved_by = approvals.get("approved_by", [])
     return len(approved_by) > 0
 
 
-def has_stale_product_pass(comments: list[dict], mr_description: str = "") -> bool:
-    """Returns True if there IS a product:pass comment but it predates the last push."""
-    _PASS_RE = re.compile(r"product:pass", re.IGNORECASE)
-    desc = mr_description.strip()
-    last_push = get_last_push_time(comments)
-    if last_push is None:
-        return False
-    for note in comments:
+def check_issue_pass(
+    comments: list[dict],
+    keyword: str,
+    since_time: Optional[str],
+    expected_username: str,
+) -> tuple[bool, bool, str]:
+    """Check if keyword appears in issue comments after since_time.
+
+    Returns (passed, is_proxy, proxy_username).
+    is_proxy=True means someone other than expected_username posted the pass.
+    """
+    pattern = re.compile(re.escape(keyword), re.IGNORECASE)
+    for note in sorted(comments, key=lambda n: n.get("created_at", ""), reverse=True):
         if note.get("system"):
             continue
         body: str = note.get("body", "")
-        if desc and body.strip() == desc:
+        if not pattern.search(body):
             continue
-        if _PASS_RE.search(body):
-            created_at = note.get("created_at", "")
-            if created_at and created_at <= last_push:
-                return True
-    return False
-
-
-def get_last_product_pass_time(comments: list[dict], mr_description: str = "") -> Optional[str]:
-    _PASS_RE = re.compile(r"product:pass", re.IGNORECASE)
-    desc = mr_description.strip()
-    last_time: Optional[str] = None
-    for note in comments:
-        if note.get("system"):
+        created_at = note.get("created_at", "")
+        if since_time and created_at <= since_time:
             continue
-        body: str = note.get("body", "")
-        if desc and body.strip() == desc:
-            continue
-        if _PASS_RE.search(body):
-            t = note.get("created_at")
-            if t and (last_time is None or t > last_time):
-                last_time = t
-    return last_time
+        author_username = note.get("author", {}).get("username", "")
+        is_proxy = bool(expected_username) and author_username != expected_username
+        return True, is_proxy, (author_username if is_proxy else "")
+    return False, False, ""
 
 
 def get_last_push_time(comments: list[dict]) -> Optional[str]:
