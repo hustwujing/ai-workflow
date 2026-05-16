@@ -712,17 +712,22 @@ ccg gitlab commit "修复消费记录接口超时问题"
 
 ---
 
-### 步骤 4：研发 — 创建 MR（直接合入 main）
+### 步骤 4：研发 — 创建 MR
 
 ```bash
+# 紧急路径：直接合入 main 上线（默认）
 ccg gitlab mr create
+
+# 非紧急路径：合入 pre，随下次正常发布一起上线
+ccg gitlab mr create --target pre
 ```
 
-**与需求 MR 的区别：**
-- MR 目标分支是 **`main`**（热修不经过 pre，直接上线）
-- MR 标题前缀为 `[Bug热修]`
+**说明：**
+- **默认（紧急路径）**：目标分支为 `main`，热修直接上线，需要 `HOTFIX_REQUIRED_APPROVALS`（默认 2）人 Approve。
+- **`--target pre`（非紧急路径）**：目标分支为 `pre`，与下次上线一起发布，只需 1 人 Approve，等同于普通需求 MR。
+- MR 标题前缀为 `[Bug热修]`。
 
-企业微信通知内容与需求流程步骤 4 格式相同，但合并目标显示为 `main`。
+企业微信通知内容与需求流程步骤 4 格式相同，但合并目标显示为 `main` 或 `pre`。
 
 ---
 
@@ -926,7 +931,7 @@ WECHAT_DAILY_REPORT_WEBHOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send
 | `ccg gitlab feature start <issue_id> [--base 分支]` | 需求/优化开发开始，自动识别 Issue 类型，默认从 main checkout | 研发 |
 | `ccg gitlab hotfix start <issue_id> [--base 分支]` | Bug 热修开始，默认从 main checkout | 研发 |
 | `ccg gitlab commit "说明"` | 开发过程中提交代码 | 研发 |
-| `ccg gitlab mr create` | 开发完成，创建 MR | 研发 |
+| `ccg gitlab mr create [--target 分支]` | 开发完成，创建 MR；hotfix 默认合 `main`，可用 `--target pre` 走非紧急路径 | 研发 |
 | `ccg gitlab mr check <mr_iid>` | 查看 MR 研发审批状态 | 研发 |
 | `ccg gitlab mr merge <mr_iid>` | 执行合并（需研发 Approve 通过） | 研发 |
 | `ccg gitlab mr release` | 创建上线 MR（pre → main） | 研发 |
