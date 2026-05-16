@@ -626,14 +626,18 @@ flowchart TD
     bFail -. 产品补充并指派后通知研发重新认领 .-> B
     B -. 🤖企微自动 .-> bN["「🚨 热修开始」\n@产品 @研发 @TL"]:::bot
     B -->|"✓ 格式合规"| C["👨‍💻 研发\nccg gitlab commit（可多次）"]
-    C --> D["👨‍💻 研发\nccg gitlab mr create → main"]
-    D -. 🤖企微自动 .-> dN["「MR 待评审」\n@产品（知悉）@Reviewer（审批）"]:::bot
-    D --> E["🧑‍💼 产品\n查看 MR 了解改动（知悉即可）"]
-    D --> F["👀 Reviewer\nGitLab 点击 Approve"]
+    C --> D{"紧急程度？"}
+    D -->|"🚨 紧急（默认）"| D1["👨‍💻 研发\nccg gitlab mr create\n目标：main，需 HOTFIX_REQUIRED_APPROVALS 人 Approve"]
+    D -->|"⏳ 非紧急\n--target pre"| D2["👨‍💻 研发\nccg gitlab mr create --target pre\n目标：pre，需 1 人 Approve"]
+    D1 -. 🤖企微自动 .-> dN["「MR 待评审」\n@产品（知悉）@Reviewer（审批）"]:::bot
+    D2 -. 🤖企微自动 .-> dN
+    D1 --> F["👀 Reviewer\nGitLab 点击 Approve"]
+    D2 --> F
     F -. 👤人工 .-> fN["建议：Reviewer 在企微\n告知研发已 Approve"]:::human
     F --> G{"研发 Approve\n通过？"}
     G -->|"✗ 未通过"| F
-    G -->|"✓ 通过"| H["👨‍💻 研发\nccg gitlab mr merge → main\nIssue 自动关闭"]
+    G -->|"✓ 通过（紧急路径）"| H["👨‍💻 研发\nccg gitlab mr merge → main\nIssue 自动关闭"]
+    G -->|"✓ 通过（非紧急路径）"| H2["👨‍💻 研发\nccg gitlab mr merge → pre\n走需求上线流程（验收 → mr release → mr merge）"]
     H -. 🤖企微自动 .-> hN["「MR 已合并」\n@研发 提示同步 pre"]:::bot
     H --> I["👨‍💻 研发\nccg gitlab mr sync-pre"]
     I -. 🤖企微自动 .-> iN["「同步 MR 已创建」\n@Reviewer @研发"]:::bot
@@ -687,7 +691,7 @@ ccg gitlab hotfix start <issue_id> [--base <分支名>]
 # 默认从 main checkout
 ccg gitlab hotfix start 456
 
-# 从指定分支 checkout（合入目标仍为 main，不变）
+# 从指定分支 checkout（--base 不影响合入目标，目标在 mr create 时决定）
 ccg gitlab hotfix start 456 --base release/v2.1
 ```
 
