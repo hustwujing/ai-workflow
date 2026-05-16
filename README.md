@@ -67,6 +67,7 @@ GITLAB_BRANCH_MAIN=main                     # 生产分支名
 GITLAB_BRANCH_PRE=pre                       # 预发/测试分支名
 WECHAT_WEBHOOK_URL=https://...             # 研发工作流通知群 Webhook（MR 创建/合并/更新等）
 WECHAT_DAILY_REPORT_WEBHOOK_URL=https://... # 日报专用群 Webhook（建议单独建群@老板，不填则复用上方）
+GITLAB_HOOK_URL=http://your-server:8888   # 可选：ai-gitlab-hook 地址，配置后日报含违规记录
 WECHAT_AT_TL=138xxxx,139xxxx              # Reviewer 手机号（多个逗号分隔）
 GITLAB_REVIEWER_USERNAMES=zhangsan,lisi    # Reviewer GitLab 用户名
 WECHAT_USER_zhangsan=13900000001           # 全体成员手机号映射（新成员入职时追加）
