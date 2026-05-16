@@ -17,6 +17,7 @@
 - MR 合并前强制研发 Approve 审批
 - pre 环境验收双确认：产品和研发分别在 Issue 评论区发布验收口令（`product:pass` / `developer:pass`），缺一不可才允许上线；支持 `product:reject` / `developer:reject 原因` 显式拒绝并附带说明
 - 全程企业微信 @ 对应责任人，明确下一步动作
+- 可选配套 [ai-gitlab-hook](https://github.com/hustwujing/-ai-gitlab-hook)：将所有人工通知节点升级为 GitLab 事件自动触发，流程完全闭环
 
 ---
 
@@ -91,6 +92,30 @@ GITLAB_USERNAME=XXXXXX                   # 自己的 GitLab 用户名
 3. 填写 Token 名称，勾选 **`api`** 权限，生成后复制
 4. 将 Token 填入 `.env` 的 `GITLAB_PRIVATE_TOKEN` 字段
 
+### 5. 配套 GitLab Webhook 自动通知（可选，强烈推荐）
+
+流程图中黄色框 👤 的节点默认需要人工在企微通知下一位责任人。部署 **[ai-gitlab-hook](https://github.com/hustwujing/-ai-gitlab-hook)** 服务后，这些节点全部由 GitLab 事件自动触发，无需人工提醒，流程完全闭环。
+
+**自动化覆盖范围：**
+
+| 场景 | 原来 | 配套后 |
+|------|------|--------|
+| 需求/Bug Issue 创建（格式合规） | 产品人工告知研发认领 | GitLab 事件自动 @ 研发 |
+| Issue 格式不合规 | 研发跑命令时通知产品 | Issue 创建时立即通知产品 |
+| Issue 格式补全 | 产品补充后人工告知研发 | GitLab 事件自动 @ 研发 |
+| 需求/热修 MR Approve | Reviewer 人工告知研发可合并 | GitLab 事件自动 @ 研发 |
+| 上线 MR Approve | TL 人工告知研发可执行上线 | GitLab 事件自动 @ 研发 |
+| pre 验收 pass / reject | 研发/产品各自人工通知对方 | 评论后自动互通知对方 |
+
+**部署步骤：**
+
+1. 按 [ai-gitlab-hook README](https://github.com/hustwujing/-ai-gitlab-hook) 完成服务部署（约 5 分钟）
+2. 在 GitLab 项目中注册 Webhook：**Settings → Webhooks → Add new webhook**
+   - **URL**：`http(s)://your-server/gitlab/webhook`
+   - **勾选事件**：`Issues events`、`Merge request events`、`Comments`
+   - **Secret token**（可选）：与服务端 `config.yaml` 中的 `secret_token` 保持一致
+3. 保存后即生效，后续所有黄色节点由 GitLab 自动推送，无需人工提醒
+
 ---
 
 ## 三、角色说明
@@ -120,7 +145,7 @@ main（线上生产分支）
 
 适用场景：新功能开发、产品迭代需求
 
-> 蓝色框 🤖 = 企微机器人自动发送；黄色框 👤 = 无自动通知，建议人工在企微告知
+> 蓝色框 🤖 = 企微机器人自动发送；黄色框 👤 = 默认需人工在企微告知（部署 [ai-gitlab-hook](https://github.com/hustwujing/-ai-gitlab-hook) 后可自动化）
 
 ```mermaid
 flowchart TD
@@ -574,7 +599,7 @@ ccg gitlab mr merge 46
 
 适用场景：线上紧急 Bug 修复
 
-> 蓝色框 🤖 = 企微机器人自动发送；黄色框 👤 = 无自动通知，建议人工在企微告知
+> 蓝色框 🤖 = 企微机器人自动发送；黄色框 👤 = 默认需人工在企微告知（部署 [ai-gitlab-hook](https://github.com/hustwujing/-ai-gitlab-hook) 后可自动化）
 
 ```mermaid
 flowchart TD
