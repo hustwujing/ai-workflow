@@ -631,6 +631,8 @@ flowchart TD
     D -->|"⏳ 非紧急\n--target pre"| D2["👨‍💻 研发\nccg gitlab mr create --target pre\n目标：pre，需 1 人 Approve"]
     D1 -. 🤖企微自动 .-> dN["「MR 待评审」\n@产品（知悉）@Reviewer（审批）"]:::bot
     D2 -. 🤖企微自动 .-> dN
+    D1 --> E["🧑‍💼 产品\n查看 MR 了解改动（知悉即可）"]
+    D2 --> E
     D1 --> F["👀 Reviewer\nGitLab 点击 Approve"]
     D2 --> F
     F -. 👤人工 .-> fN["建议：Reviewer 在企微\n告知研发已 Approve"]:::human
