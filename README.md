@@ -291,7 +291,7 @@ ccg gitlab feature start 123 --base pre
 
 下一步 · wujing03
 > 1. 当前已切换到分支，直接开始开发
-> 2. 每次提交代码执行：ccg gitlab commit "具体改动说明"
+> 2. 每次提交代码执行：ccg gitlab commit（可省略说明，自动生成）
 > 3. 开发完成后：ccg gitlab mr create
 ```
 
@@ -304,14 +304,18 @@ ccg gitlab feature start 123 --base pre
 **执行命令：**
 
 ```bash
+# 方式一：省略说明，自动生成（推荐）
+ccg gitlab commit
+
+# 方式二：直接传入说明
 ccg gitlab commit "具体改动说明"
 ```
 
-示例：
-```bash
-ccg gitlab commit "新增消费记录列表页面"
-ccg gitlab commit "接入消费记录接口"
-```
+**省略说明时的交互流程：**
+1. 工具读取暂存区（`git diff --cached`）内容
+2. 若配置了 `LLM_API_KEY`，调用大模型生成一行中文说明并预填到编辑器
+3. 若未配置 LLM，打开编辑器并将变更文件摘要以 `#` 注释形式展示供参考
+4. 编辑器保存后使用最终内容提交；`#` 开头的注释行自动忽略；内容为空则取消
 
 **工具自动完成：**
 - 自动在提交信息前追加 Issue 编号，实际 commit message 为：`[#123] 新增消费记录列表页面`
@@ -944,7 +948,7 @@ WECHAT_DAILY_REPORT_WEBHOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send
 |------|----------|--------|
 | `ccg gitlab feature start <issue_id> [--base 分支]` | 需求/优化开发开始，自动识别 Issue 类型，默认从 main checkout | 研发 |
 | `ccg gitlab hotfix start <issue_id> [--base 分支]` | Bug 热修开始，默认从 main checkout | 研发 |
-| `ccg gitlab commit "说明"` | 开发过程中提交代码 | 研发 |
+| `ccg gitlab commit ["说明"]` | 开发过程中提交代码；省略说明时自动调用 LLM 生成并打开编辑器确认 | 研发 |
 | `ccg gitlab mr create [--target 分支]` | 开发完成，创建 MR；hotfix 默认合 `main`，可用 `--target pre` 走非紧急路径 | 研发 |
 | `ccg gitlab mr check <mr_iid>` | 查看 MR 研发审批状态 | 研发 |
 | `ccg gitlab mr merge <mr_iid>` | 执行合并（需研发 Approve 通过） | 研发 |
@@ -1091,4 +1095,4 @@ A：可能是 `WECHAT_WEBHOOK_URL` 未配置，或该用户的手机号未在 `.
 
 **Q：`ccg gitlab commit` 和直接 `git commit` 有什么区别？**
 
-A：`ccg gitlab commit` 会自动在 commit message 前追加 `[#issue_id]`，方便后续 MR 关联 Issue；其他逻辑完全一致。
+A：两点区别：① 自动在 commit message 前追加 `[#issue_id]`，方便后续 MR 关联 Issue；② 省略说明时会调用 LLM 根据暂存区 diff 自动生成提交说明，并打开编辑器供确认修改（未配置 `LLM_API_KEY` 时直接打开编辑器，并将变更摘要以注释形式展示）。

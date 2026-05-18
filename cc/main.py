@@ -204,6 +204,82 @@ def cmd_hotfix_start(args: argparse.Namespace) -> None:
     )
 
 
+def _get_staged_diff() -> str:
+    import subprocess
+    result = subprocess.run(
+        ["git", "diff", "--cached", "--stat", "--diff-algorithm=minimal"],
+        capture_output=True, text=True,
+    )
+    stat = result.stdout.strip()
+    result2 = subprocess.run(
+        ["git", "diff", "--cached", "--diff-algorithm=minimal", "-U3"],
+        capture_output=True, text=True,
+    )
+    patch = result2.stdout.strip()
+    # 截断过长的 diff，避免超出 LLM 上下文
+    if len(patch) > 8000:
+        patch = patch[:8000] + "\n... (截断)"
+    return f"{stat}\n\n{patch}".strip()
+
+
+def _generate_commit_message(diff: str, cfg) -> str:
+    import json
+    import urllib.request
+    import urllib.error
+
+    if not cfg.llm_api_key:
+        return ""
+
+    prompt = (
+        "根据以下 git diff 生成一行简洁的中文提交说明（不超过 60 字），"
+        "直接输出提交说明文本，不要加任何前缀或解释。\n\n"
+        f"```diff\n{diff}\n```"
+    )
+    payload = {
+        "model": cfg.llm_model,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 200,
+        "temperature": 0.3,
+    }
+    body = json.dumps(payload).encode("utf-8")
+    url = cfg.llm_base_url.rstrip("/") + "/chat/completions"
+    req = urllib.request.Request(url, data=body, method="POST")
+    req.add_header("Content-Type", "application/json")
+    req.add_header("Authorization", f"Bearer {cfg.llm_api_key}")
+
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+            return result["choices"][0]["message"]["content"].strip()
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8", errors="replace")
+        print(f"[commit] LLM 调用失败 HTTP {e.code}: {err_body}", file=sys.stderr)
+        return ""
+    except Exception as e:
+        print(f"[commit] LLM 调用失败: {e}", file=sys.stderr)
+        return ""
+
+
+def _open_editor(initial_text: str) -> str:
+    import os
+    import tempfile
+    import subprocess
+
+    editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or "vi"
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".txt", prefix="ccg_commit_", delete=False, encoding="utf-8"
+    ) as f:
+        f.write(initial_text)
+        tmp_path = f.name
+
+    try:
+        subprocess.run([editor, tmp_path])
+        with open(tmp_path, encoding="utf-8") as f:
+            return f.read().strip()
+    finally:
+        os.unlink(tmp_path)
+
+
 def cmd_commit(args: argparse.Namespace) -> None:
     try:
         branch = get_current_branch()
@@ -227,6 +303,34 @@ def cmd_commit(args: argparse.Namespace) -> None:
 
     issue_id = get_issue_id_from_branch(branch)
     message = args.message
+
+    if not message:
+        diff = _get_staged_diff()
+        if not diff:
+            print("[错误] 暂存区为空，请先 git add 要提交的文件。", file=sys.stderr)
+            sys.exit(1)
+
+        cfg = load_config()
+        if cfg.llm_api_key:
+            print(f"[commit] 调用 LLM（{cfg.llm_model}）生成提交说明...")
+            message = _generate_commit_message(diff, cfg)
+            if message:
+                print(f"[commit] 生成结果：{message}")
+            else:
+                message = ""
+        else:
+            stat = diff.split("\n\n")[0]
+            comment_block = "\n".join(f"# {line}" for line in stat.splitlines())
+            message = f"\n\n# 本次变更（以 # 开头的行提交时自动忽略）：\n{comment_block}"
+
+        raw = _open_editor(message)
+        message = "\n".join(
+            line for line in raw.splitlines() if not line.startswith("#")
+        ).strip()
+        if not message:
+            print("[中止] 提交说明为空，已取消。", file=sys.stderr)
+            sys.exit(1)
+
     if issue_id:
         message = f"[#{issue_id}] {message}"
 
@@ -884,7 +988,10 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # ccg gitlab commit ...
     commit_parser = gitlab_sub.add_parser("commit", help="规范提交代码")
-    commit_parser.add_argument("message", help="提交说明")
+    commit_parser.add_argument(
+        "message", nargs="?", default=None,
+        help="提交说明（省略时自动调用 LLM 生成并打开编辑器确认）",
+    )
     commit_parser.set_defaults(func=cmd_commit)
 
     # ccg gitlab mr ...
