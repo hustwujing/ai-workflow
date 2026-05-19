@@ -735,7 +735,31 @@ def cmd_mr_merge(args: argparse.Namespace) -> None:
     try:
         api.merge_mr(mr_iid)
     except GitLabError as e:
-        if "HTTP 406" in str(e):
+        if "HTTP 405" in str(e):
+            tl_label = "、".join(tl_names) if tl_names else "TL"
+            reasons: list[str] = []
+            if mr.get("work_in_progress") or mr.get("draft"):
+                reasons.append("MR 处于 Draft/WIP 状态 — 请在 GitLab 页面点击「Mark as ready」")
+            if mr.get("state") != "opened":
+                reasons.append(f"MR 状态为「{mr.get('state')}」而非 opened — 无法合并")
+            if mr.get("has_conflicts"):
+                reasons.append("存在合并冲突 — 在本地解决冲突后重新推送")
+            if mr.get("blocking_discussions_resolved") is False:
+                reasons.append("存在未解决的讨论 — 请在 GitLab 逐一 resolve 后重试")
+            merge_status = mr.get("detailed_merge_status") or mr.get("merge_status") or ""
+            if merge_status and merge_status not in ("can_be_merged", "mergeable"):
+                reasons.append(f"GitLab merge_status = {merge_status}（可能是 Pipeline 未通过或分支落后）")
+            if not reasons:
+                reasons.append("Pipeline 未通过、存在冲突或其他项目保护规则阻止合并")
+            reason_lines = "\n".join(f"  · {r}" for r in reasons)
+            print(
+                f"[错误] MR !{mr_iid} 当前不可合并，检测到以下问题：\n"
+                f"{reason_lines}\n\n"
+                f"  MR 页面：{mr_url}\n"
+                f"  如有疑问请联系 {tl_label}",
+                file=sys.stderr,
+            )
+        elif "HTTP 406" in str(e):
             tl_label = "、".join(tl_names) if tl_names else "TL"
             behind = get_commits_behind(target_branch)
             if behind:
