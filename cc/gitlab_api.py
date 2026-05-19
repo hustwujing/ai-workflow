@@ -85,6 +85,16 @@ class GitLabAPI:
         users = self._request("GET", "/users", params={"username": username})
         return users[0] if users else None
 
+    def get_user_by_email(self, email: str) -> Optional[dict]:
+        try:
+            users = self._request("GET", "/users", params={"search": email})
+            for u in users:
+                if u.get("email") == email or u.get("public_email") == email:
+                    return u
+            return users[0] if users else None
+        except GitLabError:
+            return None
+
     def create_mr(
         self,
         source_branch: str,

@@ -165,10 +165,20 @@ def collect_report_data(
             "created_at": c.get("created_at") or "",
         })
 
+    # --- 建 email → GitLab username 映射，消除同一人的多个 git 名字 ---
+    unique_emails = {c["author_email"] for c in commits if c["author_email"]}
+    email_to_username: dict[str, str] = {}
+    if unique_emails:
+        print(f"[daily-report] 查询 {len(unique_emails)} 个邮箱对应的 GitLab 账号...")
+    for email in unique_emails:
+        user = api.get_user_by_email(email)
+        if user:
+            email_to_username[email] = user.get("username") or user.get("name") or email
+
     # --- 按人聚合 ---
     per_person: dict[str, dict] = {}
     for c in commits:
-        name = c["author_name"]
+        name = email_to_username.get(c["author_email"]) or c["author_name"]
         if not name:
             continue
         if name not in per_person:
@@ -228,32 +238,33 @@ _PROMPT_TEMPLATE = """\
 - 语言精炼，老板能 30 秒读完
 - 需求和 Bug 分两个独立板块，不要混在一起；type 字段为"Bug"的归入 Bug 板块，其余归入需求板块
 - 每个子类别（新提出/已完成/进行中/已修复/修复中）下必须逐条列出所有 Issue，不能只写数量；数量为 0 时写「暂无」
-- 每条 Issue 列出提出者和执行者（assignees，无则写"待分配"）
+- 每条 Issue 使用 Markdown 链接格式：[#编号 标题](url)，url 来自数据中的 url 字段
+- 每条 Issue 必须直接使用数据中的 assignees 字段：非空则写"执行者：xxx"，为空列表时才写"待分配"；禁止自行判断或推断执行者
 - 代码部分：按人汇总提交次数和行数，并说明在做什么（从 issues 字段推断）；该人无提交则不列出
 - 标题用 ### 开头
-- 「流程违规记录」板块必须输出，violations 为空时写「暂无」；非空时逐条列出：操作人、违规时间、违规动作、违背原则
+- 「流程违规记录」板块必须输出，violations 为空时写「暂无」；非空时按人头统计违规次数，按次数从多到少排列
 
 【输出示例】
 ### 📊 团队日报（过去24小时）
 
 **需求动态**
 > 新提出：1 个
-> - #45 用户中心增加消费记录（提出人：Alice，执行者：张三）
+> - [#45 用户中心增加消费记录](https://gitlab.example.com/project/-/issues/45)（提出人：Alice，执行者：张三）
 > 已完成：1 个
-> - #43 首页改版（执行：张三）
+> - [#43 首页改版](https://gitlab.example.com/project/-/issues/43)（执行：张三）
 > 进行中：3 个
-> - #40 支付流程优化（提出人：Carol，执行者：李四）
-> - #38 用户画像分析（提出人：Dave，执行者：王五）
-> - #35 消息推送改造（提出人：Eve，待分配）
+> - [#40 支付流程优化](https://gitlab.example.com/project/-/issues/40)（提出人：Carol，执行者：李四）
+> - [#38 用户画像分析](https://gitlab.example.com/project/-/issues/38)（提出人：Dave，执行者：王五）
+> - [#35 消息推送改造](https://gitlab.example.com/project/-/issues/35)（提出人：Eve，待分配）
 
 **Bug 动态**
 > 新提出：1 个
-> - #46 登录超时（提出人：Bob，待分配）
+> - [#46 登录超时](https://gitlab.example.com/project/-/issues/46)（提出人：Bob，待分配）
 > 已修复：0 个
 > 暂无
 > 修复中：2 个
-> - #42 图片上传失败（提出人：Frank，执行者：张三）
-> - #39 搜索结果乱序（提出人：Grace，执行者：李四）
+> - [#42 图片上传失败](https://gitlab.example.com/project/-/issues/42)（提出人：Frank，执行者：张三）
+> - [#39 搜索结果乱序](https://gitlab.example.com/project/-/issues/39)（提出人：Grace，执行者：李四）
 
 **代码提交**
 > 共 12 次提交，+320 / -45 行
@@ -261,9 +272,8 @@ _PROMPT_TEMPLATE = """\
 > - 李四：4 次，+110 / -15 行（#44 支付优化）
 
 **⚠ 流程违规记录**
-> - **张三** · 2026-05-16 10:23
->   违规动作：Issue #12「xxx」无人认领即关闭
->   违背原则：Issue 必须有人认领才能关闭
+> - **张三**：3 次
+> - **李四**：1 次
 
 【待整理数据】
 {data}
@@ -325,12 +335,14 @@ def format_without_llm(data: dict) -> str:
     def _issue_line(i: dict) -> str:
         assignees = "、".join(i.get("assignees") or []) if isinstance(i.get("assignees"), list) else ""
         assignee_str = f"，执行者：{assignees}" if assignees else "，待分配"
-        return f"> - #{i['id']} {i['title']}（提出人：{i['author']}{assignee_str}）"
+        link = f"[#{i['id']} {i['title']}]({i['url']})" if i.get("url") else f"#{i['id']} {i['title']}"
+        return f"> - {link}（提出人：{i['author']}{assignee_str}）"
 
     def _closed_line(i: dict) -> str:
         assignees = "、".join(i.get("assignees") or [])
         dev_str = f"执行：{assignees}" if assignees else "执行者未知"
-        return f"> - #{i['id']} {i['title']}（{dev_str}）"
+        link = f"[#{i['id']} {i['title']}]({i['url']})" if i.get("url") else f"#{i['id']} {i['title']}"
+        return f"> - {link}（{dev_str}）"
 
     new_reqs, new_bugs = _split(new_issues)
     closed_reqs, closed_bugs = _split(closed_issues)
@@ -372,17 +384,17 @@ def format_without_llm(data: dict) -> str:
                 f"+{stat['additions']} / -{stat['deletions']} 行{issue_str}"
             )
 
-    # 违规记录（始终展示）
+    # 违规记录（始终展示，按人头统计）
     violations = data.get("violations") or []
     lines.append("")
     lines.append("**⚠ 流程违规记录**")
     if violations:
+        count_by_person: dict[str, int] = {}
         for v in violations:
-            lines.append(
-                f"> - **{v['operator_name']}** · {v['time'][:16]}\n"
-                f">   违规动作：{v['action']}\n"
-                f">   违背原则：{v['principle']}"
-            )
+            name = v["operator_name"]
+            count_by_person[name] = count_by_person.get(name, 0) + 1
+        for name, cnt in sorted(count_by_person.items(), key=lambda x: -x[1]):
+            lines.append(f"> - **{name}**：{cnt} 次")
     else:
         lines.append("> 暂无")
 
