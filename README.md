@@ -73,6 +73,7 @@ GITLAB_REVIEWER_USERNAMES=zhangsan,lisi    # Reviewer GitLab 用户名
 WECHAT_USER_zhangsan=13900000001           # 全体成员手机号映射（新成员入职时追加）
 WECHAT_USER_lisi=13900000002
 HOTFIX_REQUIRED_APPROVALS=2               # 热修 MR 所需 Approve 人数（默认 2，需求 MR 固定为 1）
+DAILY_REPORT_EXCLUDE_ISSUES=1,2,3        # 可选：日报中排除的 Issue IID（逗号分隔，适合过滤测试 Issue）
 ```
 
 **第二步：在项目仓库根目录创建 `.env.local`，填写个人配置（每位研发自己操作）：**
@@ -856,7 +857,7 @@ ccg gitlab mr check <mr_iid>
 **统计维度：**
 - 需求动态：新提出/已完成/进行中（含提出人/执行人，Issue 标题保留原文）
 - Bug 动态：新提出/已修复/修复中（独立板块，与需求分开展示）
-- 代码贡献：总提交次数、总行数变化，以及每人的提交量和关联需求；同一人不同 git 名字通过邮箱查询 GitLab 账号自动归并
+- 代码贡献：总提交次数、总行数变化，以及每人的提交量和关联需求；同一人不同 git 名字通过邮箱查询 GitLab 账号自动归并；锁文件、生成代码、构建产物等噪音文件自动排除在行数统计之外
 - 流程违规：按人头统计违规次数，次数多的排前面
 
 ### 安装图片依赖
@@ -935,6 +936,16 @@ GITLAB_HOOK_URL=http://your-server:8000   # 只填 host:port，路径由工具�
 ```
 
 > 不配置此项时日报正常生成，只是不包含违规板块。
+
+### 排除测试 / 占位 Issue（可选）
+
+如果项目中有若干早期测试 Issue 不希望出现在日报里，在 `.env` 中配置：
+
+```ini
+DAILY_REPORT_EXCLUDE_ISSUES=1,2,3,4,5,6,7   # 逗号分隔的 Issue IID
+```
+
+新提出、进行中、已完成三个分类均会过滤掉这些 Issue。不填则不过滤。
 
 ### 日报发送群配置
 
