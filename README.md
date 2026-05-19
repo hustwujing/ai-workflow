@@ -851,31 +851,43 @@ ccg gitlab mr check <mr_iid>
 
 ## 八、每日工作日报
 
-`ccg gitlab daily-report` 会从 GitLab 采集过去 N 小时的数据，经 LLM 整理后发送至企业微信，让老板随时掌握团队进展。
+`ccg gitlab daily-report` 会从 GitLab 采集过去 N 小时的数据，经 LLM 整理后**以图片形式**发送至企业微信，绕过企微 markdown 4096 字符上限，放大查看仍保持清晰（2x 高清渲染）。
 
 **统计维度：**
-- 需求动态：新提出/已完成/进行中（含提出人/执行人，Issue 标题为可点击链接）
+- 需求动态：新提出/已完成/进行中（含提出人/执行人，Issue 标题保留原文）
 - Bug 动态：新提出/已修复/修复中（独立板块，与需求分开展示）
 - 代码贡献：总提交次数、总行数变化，以及每人的提交量和关联需求；同一人不同 git 名字通过邮箱查询 GitLab 账号自动归并
 - 流程违规：按人头统计违规次数，次数多的排前面
 
+### 安装图片依赖
+
+日报图片渲染依赖 Pillow，**首次使用需安装**：
+
+```bash
+pip install "cc-gitlab[image]"
+# 或直接
+pip install Pillow
+```
+
+未安装 Pillow 时自动降级为 markdown 文本发送（受企微 4096 字符限制）。
+
 ### 使用方法
 
 ```bash
-# 完整流程：采集数据 → LLM 总结 → 发企微（需配置 LLM_API_KEY）
+# 完整流程：采集数据 → LLM 总结 → 生成图片 → 发企微
 ccg gitlab daily-report
 
 # 统计过去 48 小时
 ccg gitlab daily-report --hours 48
 
-# 跳过 LLM，使用内置格式化直接发送
+# 跳过 LLM，使用内置格式化
 ccg gitlab daily-report --no-llm
 
-# 预览日报内容（不发送企微）；使用 LLM 时会打印调用状态和返回字符数
+# 预览日报内容（不发送企微）
 ccg gitlab daily-report --dry-run
 ```
 
-`--dry-run` 控制台输出示例（配置了 LLM）：
+`--dry-run` 控制台输出示例（配置了 LLM + Pillow）：
 
 ```
 [daily-report] 统计过去 24 小时（2026-05-14T10:34:04Z 至今）...
@@ -893,6 +905,7 @@ ccg gitlab daily-report --dry-run
 ```
 
 > LLM 调用失败时会打印 `LLM 调用失败 HTTP xxx: ...` 并自动降级为内置格式化。
+> 图片生成失败时会打印错误信息并自动降级为 markdown 文本发送。
 
 ### LLM 配置（可选）
 
