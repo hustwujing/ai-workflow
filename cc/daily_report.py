@@ -27,6 +27,8 @@ _EXCLUDED_PATH_PATTERNS: list[str] = [
     "go.sum", "Gemfile.lock", "composer.lock", "poetry.lock",
     # Protobuf / 代码生成
     "*.pb.go", "*_pb2.py", "*.pb.ts", "*_grpc.py",
+    # 文档
+    "*.md",
     # 压缩 / source map
     "*.min.js", "*.min.css", "*.map",
     # 构建产物 / 第三方依赖 / IDE
