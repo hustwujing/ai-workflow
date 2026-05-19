@@ -52,6 +52,7 @@ class Config:
     llm_base_url: str = "https://api.openai.com/v1"
     llm_api_key: str = ""
     llm_model: str = "gpt-4o-mini"
+    daily_report_exclude_issues: set[int] = field(default_factory=set)  # 日报中排除的 Issue IID 集合
 
     def resolve_wechat_id(self, gitlab_username: str) -> str:
         """GitLab 用户名 → 手机号，找不到返回空字符串"""
@@ -98,6 +99,9 @@ def load_config() -> Config:
     reviewer_raw = optional("GITLAB_REVIEWER_USERNAMES")
     gitlab_reviewer_usernames = [x.strip() for x in reviewer_raw.split(",") if x.strip()]
 
+    exclude_raw = optional("DAILY_REPORT_EXCLUDE_ISSUES")
+    exclude_issues = {int(x.strip()) for x in exclude_raw.split(",") if x.strip().isdigit()}
+
     cfg = Config(
         gitlab_url=require("GITLAB_URL").rstrip("/"),
         gitlab_token=require("GITLAB_PRIVATE_TOKEN"),
@@ -115,6 +119,7 @@ def load_config() -> Config:
         llm_base_url=optional("LLM_BASE_URL", "https://api.openai.com/v1"),
         llm_api_key=optional("LLM_API_KEY"),
         llm_model=optional("LLM_MODEL", "gpt-4o-mini"),
+        daily_report_exclude_issues=exclude_issues,
     )
 
     if missing:

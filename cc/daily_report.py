@@ -177,6 +177,12 @@ def collect_report_data(
         for i in open_raw
     ]
 
+    # --- 过滤排除的 Issue ---
+    if cfg.daily_report_exclude_issues:
+        new_issues    = [i for i in new_issues    if i["id"] not in cfg.daily_report_exclude_issues]
+        closed_issues = [i for i in closed_issues if i["id"] not in cfg.daily_report_exclude_issues]
+        open_issues   = [i for i in open_issues   if i["id"] not in cfg.daily_report_exclude_issues]
+
     # --- Commits ---
     print("[daily-report] 拉取提交记录（过滤生成文件后统计行数）...")
     try:
