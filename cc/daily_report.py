@@ -133,6 +133,7 @@ def collect_report_data(
             "id": i["iid"],
             "title": i.get("title", ""),
             "author": (i.get("author") or {}).get("name") or (i.get("author") or {}).get("username", ""),
+            "assignees": _extract_assignees(i),
             "type": _issue_type(i.get("title", "")),
             "url": i.get("web_url") or f"{gitlab_base}/-/issues/{i['iid']}",
         }
