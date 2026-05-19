@@ -227,11 +227,11 @@ _PROMPT_TEMPLATE = """\
 - 使用企业微信 Markdown 格式（支持 **加粗**、> 引用、- 列表）
 - 语言精炼，老板能 30 秒读完
 - 需求和 Bug 分两个独立板块，不要混在一起；type 字段为"Bug"的归入 Bug 板块，其余归入需求板块
+- 每个子类别（新提出/已完成/进行中/已修复/修复中）下必须逐条列出所有 Issue，不能只写数量；数量为 0 时写「暂无」
 - 每条 Issue 列出提出者和执行者（assignees，无则写"待分配"）
-- 代码部分：按人汇总提交次数和行数，并说明在做什么（从 issues 字段推断）
-- 如果某人当天没有提交，不要列出
+- 代码部分：按人汇总提交次数和行数，并说明在做什么（从 issues 字段推断）；该人无提交则不列出
 - 标题用 ### 开头
-- 如果 violations 字段非空，必须输出「流程违规记录」板块，逐条列出：操作人、违规时间、违规动作、违背原则
+- 「流程违规记录」板块必须输出，violations 为空时写「暂无」；非空时逐条列出：操作人、违规时间、违规动作、违背原则
 
 【输出示例】
 ### 📊 团队日报（过去24小时）
@@ -242,12 +242,18 @@ _PROMPT_TEMPLATE = """\
 > 已完成：1 个
 > - #43 首页改版（执行：张三）
 > 进行中：3 个
+> - #40 支付流程优化（提出人：Carol，执行者：李四）
+> - #38 用户画像分析（提出人：Dave，执行者：王五）
+> - #35 消息推送改造（提出人：Eve，待分配）
 
 **Bug 动态**
 > 新提出：1 个
 > - #46 登录超时（提出人：Bob，待分配）
 > 已修复：0 个
+> 暂无
 > 修复中：2 个
+> - #42 图片上传失败（提出人：Frank，执行者：张三）
+> - #39 搜索结果乱序（提出人：Grace，执行者：李四）
 
 **代码提交**
 > 共 12 次提交，+320 / -45 行
@@ -330,30 +336,26 @@ def format_without_llm(data: dict) -> str:
     closed_reqs, closed_bugs = _split(closed_issues)
     open_reqs, open_bugs = _split(open_issues)
 
+    def _append_section(label: str, items: list[dict], line_fn: Any) -> None:
+        lines.append(f"> {label}：{len(items)} 个")
+        if items:
+            for i in items:
+                lines.append(line_fn(i))
+        else:
+            lines.append("> 暂无")
+
     # 需求动态
     lines.append("**需求动态**")
-    lines.append(f"> 新提出：{len(new_reqs)} 个")
-    for i in new_reqs:
-        lines.append(_issue_line(i))
-    lines.append(f"> 已完成：{len(closed_reqs)} 个")
-    for i in closed_reqs:
-        lines.append(_closed_line(i))
-    lines.append(f"> 进行中：{len(open_reqs)} 个")
-    for i in open_reqs:
-        lines.append(_issue_line(i))
+    _append_section("新提出", new_reqs, _issue_line)
+    _append_section("已完成", closed_reqs, _closed_line)
+    _append_section("进行中", open_reqs, _issue_line)
     lines.append("")
 
     # Bug 动态
     lines.append("**Bug 动态**")
-    lines.append(f"> 新提出：{len(new_bugs)} 个")
-    for i in new_bugs:
-        lines.append(_issue_line(i))
-    lines.append(f"> 已修复：{len(closed_bugs)} 个")
-    for i in closed_bugs:
-        lines.append(_closed_line(i))
-    lines.append(f"> 修复中：{len(open_bugs)} 个")
-    for i in open_bugs:
-        lines.append(_issue_line(i))
+    _append_section("新提出", new_bugs, _issue_line)
+    _append_section("已修复", closed_bugs, _closed_line)
+    _append_section("修复中", open_bugs, _issue_line)
     lines.append("")
 
     # 代码提交
@@ -370,17 +372,19 @@ def format_without_llm(data: dict) -> str:
                 f"+{stat['additions']} / -{stat['deletions']} 行{issue_str}"
             )
 
-    # 违规记录
+    # 违规记录（始终展示）
     violations = data.get("violations") or []
+    lines.append("")
+    lines.append("**⚠ 流程违规记录**")
     if violations:
-        lines.append("")
-        lines.append("**⚠ 流程违规记录**")
         for v in violations:
             lines.append(
                 f"> - **{v['operator_name']}** · {v['time'][:16]}\n"
                 f">   违规动作：{v['action']}\n"
                 f">   违背原则：{v['principle']}"
             )
+    else:
+        lines.append("> 暂无")
 
     return "\n".join(lines)
 
