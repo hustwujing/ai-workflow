@@ -402,6 +402,20 @@ def notify_daily_report(webhook_url: str, content: str) -> None:
     send_webhook(webhook_url, content)
 
 
+def notify_daily_report_image(webhook_url: str, image_bytes: bytes) -> None:
+    import base64
+    import hashlib
+    if not webhook_url:
+        print("[企微] Webhook URL 未配置，跳过通知。", file=sys.stderr)
+        return
+    b64 = base64.b64encode(image_bytes).decode()
+    md5 = hashlib.md5(image_bytes).hexdigest()
+    _post(webhook_url, {
+        "msgtype": "image",
+        "image": {"base64": b64, "md5": md5},
+    })
+
+
 def notify_sync_pre(
     webhook_url: str,
     mr_iid: int,

@@ -11,7 +11,8 @@ from typing import Any, Optional
 
 from .config import Config, load_config
 from .gitlab_api import GitLabAPI, GitLabError
-from .wechat import notify_daily_report
+from .wechat import notify_daily_report, notify_daily_report_image
+from .report_image import PIL_AVAILABLE, render_report
 
 
 # ---------------------------------------------------------------------------
@@ -436,6 +437,16 @@ def cmd_daily_report(args: argparse.Namespace) -> None:
     if dry_run:
         print("[daily-report] --dry-run 模式，不发送企微通知。")
         return
+
+    if PIL_AVAILABLE:
+        print("[daily-report] 生成日报图片...")
+        try:
+            img_bytes = render_report(content)
+            notify_daily_report_image(cfg.wechat_daily_report_webhook_url, img_bytes)
+            print("[daily-report] 日报图片已发送至企业微信。")
+            return
+        except Exception as e:
+            print(f"[daily-report] 图片生成失败（{e}），降级为文本发送。", file=sys.stderr)
 
     notify_daily_report(cfg.wechat_daily_report_webhook_url, content)
     print("[daily-report] 日报已发送至企业微信。")
