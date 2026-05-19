@@ -157,55 +157,68 @@ class _RL:
     bullet: bool
 
 
-def render_report(content: str) -> bytes:
-    """Render markdown report as PNG, return raw bytes."""
+def render_report(content: str, scale: int = 2) -> bytes:
+    """Render markdown report as PNG, return raw bytes.
+
+    scale=2 produces a 2x high-DPI image that stays sharp when zoomed.
+    """
     if not PIL_AVAILABLE:
         raise ImportError("Pillow is required: pip install Pillow")
+
+    s = scale  # shorthand
+    w          = _W         * s
+    outer_pad  = _OUTER_PAD * s
+    inner_pad  = _INNER_PAD * s
+    content_w  = _CONTENT_W * s
+    radius     = _RADIUS    * s
+    line_spc   = _LINE_SPC  * s
 
     probe = Image.new("RGB", (1, 1))
     dp = ImageDraw.Draw(probe)
 
     rows = _parse(content)
 
-    # Expand rows into render lines (text wrapping applied)
+    # Expand rows into render lines (text wrapping applied, all sizes scaled)
     rl_list: list[_RL] = []
     for row in rows:
         if not row.text:
-            rl_list.append(_RL("", row.size, row.bold, row.color, row.indent, row.top_gap, False))
+            rl_list.append(_RL("", row.size * s, row.bold, row.color,
+                               row.indent * s, row.top_gap * s, False))
             continue
-        f = _font(row.size, row.bold)
-        avail = _CONTENT_W - row.indent - (14 if row.bullet else 0)
+        f = _font(row.size * s, row.bold)
+        avail = content_w - row.indent * s - (14 * s if row.bullet else 0)
         for i, seg in enumerate(_wrap(dp, row.text, f, avail)):
             rl_list.append(_RL(
-                seg, row.size, row.bold, row.color,
-                row.indent, row.top_gap if i == 0 else 1, row.bullet and i == 0,
+                seg, row.size * s, row.bold, row.color,
+                row.indent * s, (row.top_gap if i == 0 else 1) * s, row.bullet and i == 0,
             ))
 
-    total_h = sum(rl.size + _LINE_SPC + rl.top_gap for rl in rl_list)
-    card_h  = total_h + _INNER_PAD * 2
-    img_h   = card_h  + _OUTER_PAD * 2
+    total_h = sum(rl.size + line_spc + rl.top_gap for rl in rl_list)
+    card_h  = total_h + inner_pad * 2
+    img_h   = card_h  + outer_pad * 2
 
-    img  = Image.new("RGB", (_W, img_h), _BG)
+    img  = Image.new("RGB", (w, img_h), _BG)
     draw = ImageDraw.Draw(img)
 
-    cx0, cy0 = _OUTER_PAD, _OUTER_PAD
-    cx1, cy1 = _W - _OUTER_PAD, _OUTER_PAD + card_h
-    _rounded_rect(draw, cx0, cy0, cx1, cy1, _RADIUS, _CARD)
+    cx0, cy0 = outer_pad, outer_pad
+    cx1, cy1 = w - outer_pad, outer_pad + card_h
+    _rounded_rect(draw, cx0, cy0, cx1, cy1, radius, _CARD)
 
-    y = cy0 + _INNER_PAD
+    y = cy0 + inner_pad
     for rl in rl_list:
         y += rl.top_gap
         if not rl.text:
-            y += rl.size + _LINE_SPC
+            y += rl.size + line_spc
             continue
         f = _font(rl.size, rl.bold)
-        x = cx0 + _INNER_PAD + rl.indent
+        x = cx0 + inner_pad + rl.indent
         if rl.bullet:
             bx, by = x, y + rl.size // 2 - 2
-            draw.ellipse([bx, by, bx + 5, by + 5], fill=_BULLET)
-            x += 14
+            bs = 5 * s
+            draw.ellipse([bx, by, bx + bs, by + bs], fill=_BULLET)
+            x += 14 * s
         draw.text((x, y), rl.text, font=f, fill=rl.color)
-        y += rl.size + _LINE_SPC
+        y += rl.size + line_spc
 
     buf = io.BytesIO()
     img.save(buf, format="PNG", optimize=True)
