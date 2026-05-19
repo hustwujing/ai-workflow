@@ -7,6 +7,7 @@ import json
 import sys
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
@@ -184,10 +185,20 @@ def collect_report_data(
         print(f"[错误] 获取提交记录失败：{e}", file=sys.stderr)
         sys.exit(1)
 
+    # 并发拉取每个 commit 的文件粒度 diff
+    shas = [c.get("id") or "" for c in raw_commits]
+    sha_to_diffs: dict[str, list[dict]] = {}
+    if shas:
+        print(f"[daily-report] 并发拉取 {len(shas)} 个 commit 的文件 diff...")
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            future_to_sha = {pool.submit(api.get_commit_diff, sha): sha for sha in shas if sha}
+            for future in as_completed(future_to_sha):
+                sha_to_diffs[future_to_sha[future]] = future.result()
+
     commits = []
     for c in raw_commits:
-        sha = (c.get("id") or "")
-        file_diffs = api.get_commit_diff(sha) if sha else []
+        sha = c.get("id") or ""
+        file_diffs = sha_to_diffs.get(sha, [])
         if file_diffs:
             additions = sum(f["additions"] for f in file_diffs if not _is_excluded(f["path"]))
             deletions = sum(f["deletions"] for f in file_diffs if not _is_excluded(f["path"]))
