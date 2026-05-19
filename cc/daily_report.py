@@ -116,6 +116,7 @@ def collect_report_data(
         {
             "id": i["iid"],
             "title": i.get("title", ""),
+            "type": _issue_type(i.get("title", "")),
             "author": (i.get("author") or {}).get("name") or (i.get("author") or {}).get("username", ""),
             "assignees": _extract_assignees(i),
             "url": i.get("web_url") or f"{gitlab_base}/-/issues/{i['iid']}",
@@ -135,6 +136,7 @@ def collect_report_data(
         {
             "id": i["iid"],
             "title": i.get("title", ""),
+            "type": _issue_type(i.get("title", "")),
             "author": (i.get("author") or {}).get("name") or (i.get("author") or {}).get("username", ""),
             "assignees": _extract_assignees(i),
             "url": i.get("web_url") or f"{gitlab_base}/-/issues/{i['iid']}",
@@ -224,10 +226,10 @@ _PROMPT_TEMPLATE = """\
 【格式要求】
 - 使用企业微信 Markdown 格式（支持 **加粗**、> 引用、- 列表）
 - 语言精炼，老板能 30 秒读完
-- 需求部分：每条需求列出提出者和执行者（assignees，无则写"待分配"）
+- 需求和 Bug 分两个独立板块，不要混在一起；type 字段为"Bug"的归入 Bug 板块，其余归入需求板块
+- 每条 Issue 列出提出者和执行者（assignees，无则写"待分配"）
 - 代码部分：按人汇总提交次数和行数，并说明在做什么（从 issues 字段推断）
 - 如果某人当天没有提交，不要列出
-- 进行中的需求逐条列出，包含提出者和执行者
 - 标题用 ### 开头
 - 如果 violations 字段非空，必须输出「流程违规记录」板块，逐条列出：操作人、违规时间、违规动作、违背原则
 
@@ -235,12 +237,17 @@ _PROMPT_TEMPLATE = """\
 ### 📊 团队日报（过去24小时）
 
 **需求动态**
-> 新提出：2 个
+> 新提出：1 个
 > - #45 用户中心增加消费记录（提出人：Alice，执行者：张三）
-> - #46 【Bug】登录超时（提出人：Bob，待分配）
 > 已完成：1 个
 > - #43 首页改版（执行：张三）
-> 进行中：5 个
+> 进行中：3 个
+
+**Bug 动态**
+> 新提出：1 个
+> - #46 登录超时（提出人：Bob，待分配）
+> 已修复：0 个
+> 修复中：2 个
 
 **代码提交**
 > 共 12 次提交，+320 / -45 行
@@ -304,23 +311,49 @@ def format_without_llm(data: dict) -> str:
 
     lines = [f"### 📊 团队日报（{period}）", ""]
 
-    # 需求动态
-    lines.append("**需求动态**")
-    lines.append(f"> 新提出：{len(new_issues)} 个")
-    for i in new_issues:
+    def _split(issues: list[dict]) -> tuple[list[dict], list[dict]]:
+        bugs = [i for i in issues if i.get("type") == "Bug"]
+        reqs = [i for i in issues if i.get("type") != "Bug"]
+        return reqs, bugs
+
+    def _issue_line(i: dict) -> str:
         assignees = "、".join(i.get("assignees") or []) if isinstance(i.get("assignees"), list) else ""
         assignee_str = f"，执行者：{assignees}" if assignees else "，待分配"
-        lines.append(f"> - #{i['id']} {i['title']}（提出人：{i['author']}{assignee_str}）")
-    lines.append(f"> 已完成：{len(closed_issues)} 个")
-    for i in closed_issues:
+        return f"> - #{i['id']} {i['title']}（提出人：{i['author']}{assignee_str}）"
+
+    def _closed_line(i: dict) -> str:
         assignees = "、".join(i.get("assignees") or [])
         dev_str = f"执行：{assignees}" if assignees else "执行者未知"
-        lines.append(f"> - #{i['id']} {i['title']}（{dev_str}）")
-    lines.append(f"> 进行中：{len(open_issues)} 个")
-    for i in open_issues:
-        assignees = "、".join(i.get("assignees") or []) if isinstance(i.get("assignees"), list) else ""
-        assignee_str = f"，执行者：{assignees}" if assignees else "，待分配"
-        lines.append(f"> - #{i['id']} {i['title']}（提出人：{i['author']}{assignee_str}）")
+        return f"> - #{i['id']} {i['title']}（{dev_str}）"
+
+    new_reqs, new_bugs = _split(new_issues)
+    closed_reqs, closed_bugs = _split(closed_issues)
+    open_reqs, open_bugs = _split(open_issues)
+
+    # 需求动态
+    lines.append("**需求动态**")
+    lines.append(f"> 新提出：{len(new_reqs)} 个")
+    for i in new_reqs:
+        lines.append(_issue_line(i))
+    lines.append(f"> 已完成：{len(closed_reqs)} 个")
+    for i in closed_reqs:
+        lines.append(_closed_line(i))
+    lines.append(f"> 进行中：{len(open_reqs)} 个")
+    for i in open_reqs:
+        lines.append(_issue_line(i))
+    lines.append("")
+
+    # Bug 动态
+    lines.append("**Bug 动态**")
+    lines.append(f"> 新提出：{len(new_bugs)} 个")
+    for i in new_bugs:
+        lines.append(_issue_line(i))
+    lines.append(f"> 已修复：{len(closed_bugs)} 个")
+    for i in closed_bugs:
+        lines.append(_closed_line(i))
+    lines.append(f"> 修复中：{len(open_bugs)} 个")
+    for i in open_bugs:
+        lines.append(_issue_line(i))
     lines.append("")
 
     # 代码提交
