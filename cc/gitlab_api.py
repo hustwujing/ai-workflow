@@ -276,3 +276,23 @@ class GitLabAPI:
                 break
             page += 1
         return commits
+
+    def get_commit_diff(self, sha: str) -> list[dict]:
+        """返回 commit 每个文件的 {path, additions, deletions}，用于过滤生成文件后重新计算行数。"""
+        try:
+            diffs = self._request(
+                "GET",
+                f"/projects/{self.project_id}/repository/commits/{sha}/diff",
+                params={"per_page": 200},
+            )
+            result = []
+            for f in (diffs or []):
+                path = f.get("new_path") or f.get("old_path") or ""
+                diff_text = f.get("diff") or ""
+                lines = diff_text.splitlines()
+                additions = sum(1 for ln in lines if ln.startswith("+") and not ln.startswith("+++"))
+                deletions = sum(1 for ln in lines if ln.startswith("-") and not ln.startswith("---"))
+                result.append({"path": path, "additions": additions, "deletions": deletions})
+            return result
+        except GitLabError:
+            return []

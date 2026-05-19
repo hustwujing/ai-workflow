@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import json
 import sys
 import urllib.error
@@ -13,6 +14,36 @@ from .config import Config, load_config
 from .gitlab_api import GitLabAPI, GitLabError
 from .wechat import notify_daily_report, notify_daily_report_image
 from .report_image import PIL_AVAILABLE, render_report
+
+
+# ---------------------------------------------------------------------------
+# 生成文件过滤（行数统计时排除）
+# ---------------------------------------------------------------------------
+
+_EXCLUDED_PATH_PATTERNS: list[str] = [
+    # 依赖锁文件
+    "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
+    "go.sum", "Gemfile.lock", "composer.lock", "poetry.lock",
+    # Protobuf / 代码生成
+    "*.pb.go", "*_pb2.py", "*.pb.ts", "*_grpc.py",
+    # 压缩 / source map
+    "*.min.js", "*.min.css", "*.map",
+    # 构建产物 / 第三方依赖 / IDE
+    "dist/*", "build/*", "vendor/*", "node_modules/*",
+    ".idea/*", ".vscode/*",
+]
+
+
+def _is_excluded(path: str) -> bool:
+    name = path.rsplit("/", 1)[-1]
+    for pattern in _EXCLUDED_PATH_PATTERNS:
+        if "/" in pattern:
+            if fnmatch.fnmatch(path, pattern):
+                return True
+        else:
+            if fnmatch.fnmatch(name, pattern):
+                return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -146,7 +177,7 @@ def collect_report_data(
     ]
 
     # --- Commits ---
-    print("[daily-report] 拉取提交记录（含行数统计）...")
+    print("[daily-report] 拉取提交记录（过滤生成文件后统计行数）...")
     try:
         raw_commits = api.get_commits_since(since=since_str)
     except GitLabError as e:
@@ -155,14 +186,23 @@ def collect_report_data(
 
     commits = []
     for c in raw_commits:
-        stats = c.get("stats") or {}
+        sha = (c.get("id") or "")
+        file_diffs = api.get_commit_diff(sha) if sha else []
+        if file_diffs:
+            additions = sum(f["additions"] for f in file_diffs if not _is_excluded(f["path"]))
+            deletions = sum(f["deletions"] for f in file_diffs if not _is_excluded(f["path"]))
+        else:
+            # diff 拉取失败时降级使用聚合统计
+            stats = c.get("stats") or {}
+            additions = stats.get("additions") or 0
+            deletions = stats.get("deletions") or 0
         commits.append({
-            "sha": (c.get("id") or "")[:8],
+            "sha": sha[:8],
             "author_name": c.get("author_name") or c.get("committer_name") or "",
             "author_email": c.get("author_email") or c.get("committer_email") or "",
             "title": c.get("title") or c.get("message", "").splitlines()[0] if c.get("message") else "",
-            "additions": stats.get("additions") or 0,
-            "deletions": stats.get("deletions") or 0,
+            "additions": additions,
+            "deletions": deletions,
             "created_at": c.get("created_at") or "",
         })
 
