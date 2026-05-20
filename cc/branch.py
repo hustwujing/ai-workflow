@@ -1,6 +1,9 @@
+import json
 import re
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 from typing import Optional
 
 
@@ -36,6 +39,11 @@ def is_in_rebase() -> bool:
 
 def get_issue_id_from_branch(branch: Optional[str] = None) -> Optional[int]:
     b = branch or get_current_branch()
+    # 支持新格式：feature/123-desc, hotfix/456-desc
+    # 兼容旧格式：issue_123, hotfix_456
+    m = re.match(r"^(?:feature|hotfix)/(\d+)", b)
+    if m:
+        return int(m.group(1))
     m = re.match(r"^(?:issue|hotfix)_(\d+)", b)
     if m:
         return int(m.group(1))
@@ -44,6 +52,12 @@ def get_issue_id_from_branch(branch: Optional[str] = None) -> Optional[int]:
 
 def get_branch_type(branch: Optional[str] = None) -> Optional[str]:
     b = branch or get_current_branch()
+    # 支持新格式：feature/, hotfix/
+    if b.startswith("feature/"):
+        return "feature"
+    if b.startswith("hotfix/"):
+        return "bug"
+    # 兼容旧格式：issue_, hotfix_
     if b.startswith("issue_"):
         return "feature"
     if b.startswith("hotfix_"):
@@ -52,17 +66,93 @@ def get_branch_type(branch: Optional[str] = None) -> Optional[str]:
 
 
 def _slugify(text: str, max_len: int = 30) -> str:
-    text = re.sub(r"[【】\[\]()（）\s]+", "_", text)
-    text = re.sub(r"[^\w\-]", "", text)
-    text = text.strip("_")
+    """将标题转换为英文 slug，只保留 ASCII 字母、数字、-"""
+    # 移除特殊符号，替换为 -
+    text = re.sub(r"[【】\[\]()（）\s]+", "-", text)
+    # 只保留 ASCII 字母、数字和 -
+    text = re.sub(r"[^a-zA-Z0-9\-]", "", text)
+    # 移除首尾的 -
+    text = text.strip("-")
+    # 转小写
+    text = text.lower()
+    # 合并连续的 -
+    text = re.sub(r"-+", "-", text)
     return text[:max_len]
 
 
-def make_branch_name(issue_type: str, issue_id: int, title: str) -> str:
-    slug = _slugify(title)
+def _generate_slug_with_llm(title: str, llm_base_url: str, llm_api_key: str, llm_model: str, max_len: int = 30) -> Optional[str]:
+    """使用 LLM 将中文标题转换为英文 slug"""
+    if not llm_api_key:
+        return None
+
+    prompt = f"""将以下 Issue 标题转换为简短的英文 slug，用于 Git 分支命名。
+
+要求：
+1. 只输出 slug 本身，不要任何解释或其他内容
+2. 使用小写字母、数字和连字符（-）
+3. 多个单词用连字符连接（kebab-case）
+4. 最多 {max_len} 个字符
+5. 简洁明了，能体现核心功能
+
+Issue 标题：{title}
+
+输出示例：
+- "用户登录优化" → user-login-optimization
+- "修复支付页面崩溃" → fix-payment-crash
+- "添加商品搜索功能" → add-product-search"""
+
+    payload = {
+        "model": llm_model,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 50,
+        "temperature": 0.3,
+    }
+    body = json.dumps(payload).encode("utf-8")
+    url = llm_base_url.rstrip("/") + "/chat/completions"
+    req = urllib.request.Request(url, data=body, method="POST")
+    req.add_header("Content-Type", "application/json")
+    req.add_header("Authorization", f"Bearer {llm_api_key}")
+
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+            slug = result["choices"][0]["message"]["content"].strip()
+            # 清理 LLM 输出，确保符合规范
+            slug = slug.lower()
+            slug = re.sub(r"[^a-z0-9\-]", "", slug)
+            slug = slug.strip("-")
+            slug = re.sub(r"-+", "-", slug)
+            return slug[:max_len] if slug else None
+    except Exception as e:
+        print(f"[branch] LLM 生成 slug 失败: {e}", file=sys.stderr)
+        return None
+
+
+def make_branch_name(issue_type: str, issue_id: int, title: str, llm_base_url: str = "", llm_api_key: str = "", llm_model: str = "gpt-4o-mini") -> str:
+    """生成分支名：feature/<id>-<slug> 或 hotfix/<id>-<slug>
+
+    优先使用 LLM 生成英文 slug（如果配置了 API key），失败则回退到基于规则的提取。
+    """
+    slug = ""
+
+    # 1. 尝试使用 LLM 生成（如果配置了）
+    if llm_api_key:
+        slug = _generate_slug_with_llm(title, llm_base_url, llm_api_key, llm_model) or ""
+
+    # 2. LLM 失败或未配置，回退到规则提取
+    if not slug:
+        slug = _slugify(title)
+
     if issue_type == "feature":
-        return f"issue_{issue_id}_{slug}"
-    return f"hotfix_{issue_id}_{slug}"
+        prefix = "feature"
+    else:
+        prefix = "hotfix"
+
+    if slug:
+        return f"{prefix}/{issue_id}-{slug}"
+    else:
+        # 如果标题无法生成有效 slug，只用 ID
+        return f"{prefix}/{issue_id}"
 
 
 def checkout_and_pull_main(main_branch: str) -> None:
@@ -110,7 +200,8 @@ def create_local_branch(branch_name: str) -> None:
 def push_current_branch() -> bool:
     """推送当前分支到远端。返回 True 表示有新提交被推送，False 表示无变化。"""
     branch = get_current_branch()
-    is_feature_branch = bool(re.match(r"^(issue|hotfix)_", branch))
+    # 支持新格式 feature/, hotfix/ 和旧格式 issue_, hotfix_
+    is_feature_branch = bool(re.match(r"^(feature|hotfix)/", branch)) or bool(re.match(r"^(issue|hotfix)_", branch))
     print(f"[git] 推送分支 {branch} 到远端...")
     result = subprocess.run(
         ["git", "push", "-u", "origin", branch],

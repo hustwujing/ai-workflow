@@ -103,7 +103,14 @@ def cmd_feature_start(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     clean_title = title.replace("【需求】", "").replace("【优化】", "").strip()
-    branch_name = make_branch_name("feature", issue_id, clean_title)
+    branch_name = make_branch_name(
+        "feature",
+        issue_id,
+        clean_title,
+        llm_base_url=cfg.llm_base_url,
+        llm_api_key=cfg.llm_api_key,
+        llm_model=cfg.llm_model,
+    )
     base_branch = args.base or cfg.branch_main
 
     try:
@@ -174,7 +181,14 @@ def cmd_hotfix_start(args: argparse.Namespace) -> None:
         )
         sys.exit(1)
 
-    branch_name = make_branch_name("bug", issue_id, title.replace("【Bug】", "").replace("【bug】", "").strip())
+    branch_name = make_branch_name(
+        "bug",
+        issue_id,
+        title.replace("【Bug】", "").replace("【bug】", "").strip(),
+        llm_base_url=cfg.llm_base_url,
+        llm_api_key=cfg.llm_api_key,
+        llm_model=cfg.llm_model,
+    )
     base_branch = args.base or cfg.branch_main
 
     try:
