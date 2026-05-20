@@ -67,15 +67,6 @@ def _iso(dt: datetime) -> str:
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _fmt_date(iso_str: str) -> str:
-    """把 GitLab 返回的 ISO 8601 字符串格式化为 MM-DD。"""
-    try:
-        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
-        return dt.strftime("%m-%d")
-    except Exception:
-        return iso_str[:10] if iso_str else ""
-
-
 def _issue_type(title: str) -> str:
     t = title.lower()
     if "bug" in t or "【bug】" in t:
@@ -128,7 +119,26 @@ def collect_report_data(
 
     print(f"[daily-report] 统计过去 {hours} 小时（{since_str} 至今）...")
 
+    # --- 新提出的 Issues ---
+    print("[daily-report] 拉取新 Issues...")
+    try:
+        new_raw = api.get_issues(created_after=since_str)
+    except GitLabError as e:
+        print(f"[错误] 获取 Issues 失败：{e}", file=sys.stderr)
+        sys.exit(1)
+
     gitlab_base = f"{cfg.gitlab_url.rstrip('/')}/{cfg.gitlab_project_id}"
+    new_issues = [
+        {
+            "id": i["iid"],
+            "title": i.get("title", ""),
+            "author": (i.get("author") or {}).get("name") or (i.get("author") or {}).get("username", ""),
+            "assignees": _extract_assignees(i),
+            "type": _issue_type(i.get("title", "")),
+            "url": i.get("web_url") or f"{gitlab_base}/-/issues/{i['iid']}",
+        }
+        for i in new_raw
+    ]
 
     # --- 关闭的 Issues（在时间窗口内关闭的）---
     print("[daily-report] 拉取已关闭 Issues...")
@@ -146,20 +156,19 @@ def collect_report_data(
             "author": (i.get("author") or {}).get("name") or (i.get("author") or {}).get("username", ""),
             "assignees": _extract_assignees(i),
             "url": i.get("web_url") or f"{gitlab_base}/-/issues/{i['iid']}",
-            "created_at": _fmt_date(i.get("created_at", "")),
         }
         for i in closed_raw
     ]
 
-    # --- 所有 Opened Issues ---
-    print("[daily-report] 拉取 Opened Issues...")
+    # --- 进行中的 Issues（所有 opened，按 updated_at 倒序前 30 条）---
+    print("[daily-report] 拉取进行中 Issues...")
     try:
         open_raw = api.get_issues(state="opened")
     except GitLabError as e:
-        print(f"[错误] 获取 Opened Issues 失败：{e}", file=sys.stderr)
+        print(f"[错误] 获取进行中 Issues 失败：{e}", file=sys.stderr)
         sys.exit(1)
 
-    all_open = [
+    open_issues = [
         {
             "id": i["iid"],
             "title": i.get("title", ""),
@@ -167,23 +176,15 @@ def collect_report_data(
             "author": (i.get("author") or {}).get("name") or (i.get("author") or {}).get("username", ""),
             "assignees": _extract_assignees(i),
             "url": i.get("web_url") or f"{gitlab_base}/-/issues/{i['iid']}",
-            "created_at": _fmt_date(i.get("created_at", "")),
         }
         for i in open_raw
     ]
 
-    # --- 查询哪些 Issue 已有对应分支 ---
-    print("[daily-report] 查询 Issue 分支情况...")
-    branched_ids = api.list_issue_branch_ids()
-
-    unstarted_issues = [i for i in all_open if i["id"] not in branched_ids]
-    open_issues      = [i for i in all_open if i["id"] in branched_ids]
-
     # --- 过滤排除的 Issue ---
     if cfg.daily_report_exclude_issues:
-        unstarted_issues = [i for i in unstarted_issues if i["id"] not in cfg.daily_report_exclude_issues]
-        closed_issues    = [i for i in closed_issues    if i["id"] not in cfg.daily_report_exclude_issues]
-        open_issues      = [i for i in open_issues      if i["id"] not in cfg.daily_report_exclude_issues]
+        new_issues    = [i for i in new_issues    if i["id"] not in cfg.daily_report_exclude_issues]
+        closed_issues = [i for i in closed_issues if i["id"] not in cfg.daily_report_exclude_issues]
+        open_issues   = [i for i in open_issues   if i["id"] not in cfg.daily_report_exclude_issues]
 
     # --- Commits ---
     print("[daily-report] 拉取提交记录（过滤生成文件后统计行数）...")
@@ -249,7 +250,7 @@ def collect_report_data(
         per_person[name]["commit_titles"].append(c["title"])
 
     # 关联 Issue：从 commit title 里提取 #N 编号，再匹配 Issue 标题
-    issue_map = {str(i["id"]): i["title"] for i in unstarted_issues + closed_issues + open_issues}
+    issue_map = {str(i["id"]): i["title"] for i in new_issues + closed_issues + open_issues}
     import re
     for name, stat in per_person.items():
         issue_refs: list[str] = []
@@ -275,7 +276,7 @@ def collect_report_data(
     return {
         "period": f"过去{hours}小时",
         "since": since_str,
-        "unstarted_issues": unstarted_issues,
+        "new_issues": new_issues,
         "closed_issues": closed_issues,
         "open_issues": open_issues,
         "total_commits": len(commits),
@@ -297,10 +298,9 @@ _PROMPT_TEMPLATE = """\
 - 使用企业微信 Markdown 格式（支持 **加粗**、> 引用、- 列表）
 - 语言精炼，老板能 30 秒读完
 - 需求和 Bug 分两个独立板块，不要混在一起；type 字段为"Bug"的归入 Bug 板块，其余归入需求板块
-- 每个子类别（待认领/已完成/进行中/已修复/修复中）下必须逐条列出所有 Issue，不能只写数量；数量为 0 时写「暂无」
+- 每个子类别（新提出/已完成/进行中/已修复/修复中）下必须逐条列出所有 Issue，不能只写数量；数量为 0 时写「暂无」
 - 每条 Issue 使用 Markdown 链接格式：[#编号 标题](url)，url 来自数据中的 url 字段
 - 每条 Issue 必须直接使用数据中的 assignees 字段：非空则写"执行者：xxx"，为空列表时才写"待分配"；禁止自行判断或推断执行者
-- 每条 Issue 必须显示 created_at 字段作为提出时间（格式如"提出于：05-20"）
 - 代码部分：按人汇总提交次数和行数，并说明在做什么（从 issues 字段推断）；该人无提交则不列出
 - 标题用 ### 开头
 - 「流程违规记录」板块必须输出，violations 为空时写「暂无」；非空时按人头统计违规次数，按次数从多到少排列
@@ -309,23 +309,23 @@ _PROMPT_TEMPLATE = """\
 ### 📊 团队日报（过去24小时）
 
 **需求动态**
-> 待认领：1 个
-> - [#45 用户中心增加消费记录](https://gitlab.example.com/project/-/issues/45)（提出人：Alice，提出于：05-18，执行者：张三）
+> 新提出：1 个
+> - [#45 用户中心增加消费记录](https://gitlab.example.com/project/-/issues/45)（提出人：Alice，执行者：张三）
 > 已完成：1 个
-> - [#43 首页改版](https://gitlab.example.com/project/-/issues/43)（提出人：Bob，提出于：05-10，执行：张三）
+> - [#43 首页改版](https://gitlab.example.com/project/-/issues/43)（执行：张三）
 > 进行中：3 个
-> - [#40 支付流程优化](https://gitlab.example.com/project/-/issues/40)（提出人：Carol，提出于：05-12，执行者：李四）
-> - [#38 用户画像分析](https://gitlab.example.com/project/-/issues/38)（提出人：Dave，提出于：05-09，执行者：王五）
-> - [#35 消息推送改造](https://gitlab.example.com/project/-/issues/35)（提出人：Eve，提出于：05-01，待分配）
+> - [#40 支付流程优化](https://gitlab.example.com/project/-/issues/40)（提出人：Carol，执行者：李四）
+> - [#38 用户画像分析](https://gitlab.example.com/project/-/issues/38)（提出人：Dave，执行者：王五）
+> - [#35 消息推送改造](https://gitlab.example.com/project/-/issues/35)（提出人：Eve，待分配）
 
 **Bug 动态**
-> 待认领：1 个
-> - [#46 登录超时](https://gitlab.example.com/project/-/issues/46)（提出人：Bob，提出于：05-20，待分配）
+> 新提出：1 个
+> - [#46 登录超时](https://gitlab.example.com/project/-/issues/46)（提出人：Bob，待分配）
 > 已修复：0 个
 > 暂无
 > 修复中：2 个
-> - [#42 图片上传失败](https://gitlab.example.com/project/-/issues/42)（提出人：Frank，提出于：05-15，执行者：张三）
-> - [#39 搜索结果乱序](https://gitlab.example.com/project/-/issues/39)（提出人：Grace，提出于：05-08，执行者：李四）
+> - [#42 图片上传失败](https://gitlab.example.com/project/-/issues/42)（提出人：Frank，执行者：张三）
+> - [#39 搜索结果乱序](https://gitlab.example.com/project/-/issues/39)（提出人：Grace，执行者：李四）
 
 **代码提交**
 > 共 12 次提交，+320 / -45 行
@@ -378,7 +378,7 @@ def summarize_with_llm(data: dict, cfg: Config) -> Optional[str]:
 
 def format_without_llm(data: dict) -> str:
     period = data["period"]
-    unstarted_issues = data["unstarted_issues"]
+    new_issues = data["new_issues"]
     closed_issues = data["closed_issues"]
     open_issues = data["open_issues"]
     total_commits = data["total_commits"]
@@ -397,17 +397,15 @@ def format_without_llm(data: dict) -> str:
         assignees = "、".join(i.get("assignees") or []) if isinstance(i.get("assignees"), list) else ""
         assignee_str = f"，执行者：{assignees}" if assignees else "，待分配"
         link = f"[#{i['id']} {i['title']}]({i['url']})" if i.get("url") else f"#{i['id']} {i['title']}"
-        date_str = f"，提出于：{i['created_at']}" if i.get("created_at") else ""
-        return f"> - {link}（提出人：{i['author']}{date_str}{assignee_str}）"
+        return f"> - {link}（提出人：{i['author']}{assignee_str}）"
 
     def _closed_line(i: dict) -> str:
         assignees = "、".join(i.get("assignees") or [])
         dev_str = f"执行：{assignees}" if assignees else "执行者未知"
         link = f"[#{i['id']} {i['title']}]({i['url']})" if i.get("url") else f"#{i['id']} {i['title']}"
-        date_str = f"，提出于：{i['created_at']}" if i.get("created_at") else ""
-        return f"> - {link}（提出人：{i['author']}{date_str}，{dev_str}）"
+        return f"> - {link}（{dev_str}）"
 
-    unstarted_reqs, unstarted_bugs = _split(unstarted_issues)
+    new_reqs, new_bugs = _split(new_issues)
     closed_reqs, closed_bugs = _split(closed_issues)
     open_reqs, open_bugs = _split(open_issues)
 
@@ -421,14 +419,14 @@ def format_without_llm(data: dict) -> str:
 
     # 需求动态
     lines.append("**需求动态**")
-    _append_section("待认领", unstarted_reqs, _issue_line)
+    _append_section("新提出", new_reqs, _issue_line)
     _append_section("已完成", closed_reqs, _closed_line)
     _append_section("进行中", open_reqs, _issue_line)
     lines.append("")
 
     # Bug 动态
     lines.append("**Bug 动态**")
-    _append_section("待认领", unstarted_bugs, _issue_line)
+    _append_section("新提出", new_bugs, _issue_line)
     _append_section("已修复", closed_bugs, _closed_line)
     _append_section("修复中", open_bugs, _issue_line)
     lines.append("")
