@@ -41,6 +41,8 @@ from .wechat import (
     notify_release_merged,
     notify_sync_pre,
 )
+import os
+import subprocess
 
 
 # ---------------------------------------------------------------------------
@@ -992,6 +994,97 @@ def cmd_mr_sync_pre(args: argparse.Namespace) -> None:
     )
 
 
+def cmd_upgrade(args: argparse.Namespace) -> None:
+    """自升级 ai-workflow 到最新版本"""
+    print("[upgrade] 检查 ai-workflow 安装方式...")
+
+    # 获取当前模块所在目录
+    current_file = os.path.abspath(__file__)
+    package_dir = os.path.dirname(os.path.dirname(current_file))  # cc/main.py -> ai-workflow/
+
+    # 检查是否是 git 仓库
+    git_dir = os.path.join(package_dir, ".git")
+    if not os.path.isdir(git_dir):
+        print(
+            "[错误] ai-workflow 不是通过 git clone 安装的，无法自动升级。\n"
+            "  请手动重新安装：\n"
+            "    git clone <repo-url>\n"
+            "    cd ai-workflow\n"
+            "    pip install -e .",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    print(f"[upgrade] 发现 git 仓库：{package_dir}")
+
+    # 检查是否有未提交的修改
+    result = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=package_dir,
+        capture_output=True,
+        text=True,
+    )
+    if result.stdout.strip():
+        print(
+            "[警告] 检测到未提交的本地修改：\n"
+            f"{result.stdout}\n"
+            "  升级可能会覆盖这些修改，建议先提交或暂存。",
+            file=sys.stderr,
+        )
+        try:
+            response = input("是否继续升级？(y/N): ").strip().lower()
+            if response not in ("y", "yes"):
+                print("[中止] 已取消升级。")
+                sys.exit(0)
+        except (EOFError, KeyboardInterrupt):
+            print("\n[中止] 已取消升级。")
+            sys.exit(0)
+
+    # 获取当前分支
+    result = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+        cwd=package_dir,
+        capture_output=True,
+        text=True,
+    )
+    current_branch = result.stdout.strip()
+    print(f"[upgrade] 当前分支：{current_branch}")
+
+    # 拉取最新代码
+    print(f"[upgrade] 拉取最新代码...")
+    result = subprocess.run(
+        ["git", "pull", "origin", current_branch],
+        cwd=package_dir,
+    )
+    if result.returncode != 0:
+        print("[错误] git pull 失败，请检查网络连接或手动执行 git pull。", file=sys.stderr)
+        sys.exit(1)
+
+    # 重新安装
+    print("[upgrade] 重新安装依赖...")
+    result = subprocess.run(
+        [sys.executable, "-m", "pip", "install", "-e", "."],
+        cwd=package_dir,
+    )
+    if result.returncode != 0:
+        print("[错误] pip install 失败，请检查 Python 环境。", file=sys.stderr)
+        sys.exit(1)
+
+    print("\n[成功] ai-workflow 已升级到最新版本。")
+
+    # 显示最新的几个提交
+    result = subprocess.run(
+        ["git", "log", "--oneline", "-5"],
+        cwd=package_dir,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0 and result.stdout.strip():
+        print("\n最近的更新：")
+        for line in result.stdout.strip().splitlines():
+            print(f"  {line}")
+
+
 # ---------------------------------------------------------------------------
 # argparse 路由
 # ---------------------------------------------------------------------------
@@ -1071,6 +1164,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "--dry-run", action="store_true", help="只打印报告，不发送企微通知"
     )
     daily_report_parser.set_defaults(func=cmd_daily_report)
+
+    # ccg upgrade
+    upgrade_parser = sub.add_parser("upgrade", help="升级 ai-workflow 到最新版本")
+    upgrade_parser.set_defaults(func=cmd_upgrade)
 
     return parser
 

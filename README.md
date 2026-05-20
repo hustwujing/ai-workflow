@@ -36,7 +36,7 @@
 pip install git+https://github.com/hustwujing/ai-workflow.git
 ```
 
-**方式二：克隆后本地安装**
+**方式二：克隆后本地安装（支持自升级）**
 
 ```bash
 git clone https://github.com/hustwujing/ai-workflow.git
@@ -48,6 +48,18 @@ pip install -e ai-workflow/
 ```bash
 ccg --help
 ```
+
+**升级到最新版本：**
+
+```bash
+# 方式一安装的用户
+pip install --upgrade git+https://github.com/hustwujing/ai-workflow.git
+
+# 方式二安装的用户（推荐，一键自升级）
+ccg upgrade
+```
+
+> 详见 [UPGRADE.md](./UPGRADE.md)
 
 ### 3. 配置环境变量
 
@@ -980,6 +992,7 @@ WECHAT_DAILY_REPORT_WEBHOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send
 | `ccg gitlab mr release` | 创建上线 MR（pre → main） | 研发 |
 | `ccg gitlab mr sync-pre` | 热修后同步 main 到 pre | 研发 |
 | `ccg gitlab daily-report [--hours N] [--no-llm] [--dry-run]` | 生成并发送每日工作日报 | TL / 管理员 |
+| `ccg upgrade` | 升级 ai-workflow 到最新版本（需通过 git clone 安装） | 研发 / TL |
 
 ---
 
