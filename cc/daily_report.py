@@ -67,6 +67,15 @@ def _iso(dt: datetime) -> str:
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _fmt_date(iso_str: str) -> str:
+    """把 GitLab 返回的 ISO 8601 字符串格式化为 MM-DD。"""
+    try:
+        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+        return dt.strftime("%m-%d")
+    except Exception:
+        return iso_str[:10] if iso_str else ""
+
+
 def _issue_type(title: str) -> str:
     t = title.lower()
     if "bug" in t or "【bug】" in t:
@@ -136,6 +145,7 @@ def collect_report_data(
             "assignees": _extract_assignees(i),
             "type": _issue_type(i.get("title", "")),
             "url": i.get("web_url") or f"{gitlab_base}/-/issues/{i['iid']}",
+            "created_at": _fmt_date(i.get("created_at", "")),
         }
         for i in new_raw
     ]
@@ -156,6 +166,7 @@ def collect_report_data(
             "author": (i.get("author") or {}).get("name") or (i.get("author") or {}).get("username", ""),
             "assignees": _extract_assignees(i),
             "url": i.get("web_url") or f"{gitlab_base}/-/issues/{i['iid']}",
+            "created_at": _fmt_date(i.get("created_at", "")),
         }
         for i in closed_raw
     ]
@@ -176,6 +187,7 @@ def collect_report_data(
             "author": (i.get("author") or {}).get("name") or (i.get("author") or {}).get("username", ""),
             "assignees": _extract_assignees(i),
             "url": i.get("web_url") or f"{gitlab_base}/-/issues/{i['iid']}",
+            "created_at": _fmt_date(i.get("created_at", "")),
         }
         for i in open_raw
     ]
@@ -301,6 +313,7 @@ _PROMPT_TEMPLATE = """\
 - 每个子类别（新提出/已完成/进行中/已修复/修复中）下必须逐条列出所有 Issue，不能只写数量；数量为 0 时写「暂无」
 - 每条 Issue 使用 Markdown 链接格式：[#编号 标题](url)，url 来自数据中的 url 字段
 - 每条 Issue 必须直接使用数据中的 assignees 字段：非空则写"执行者：xxx"，为空列表时才写"待分配"；禁止自行判断或推断执行者
+- 每条 Issue 必须显示 created_at 字段作为提出时间（格式如"提出于：05-20"）
 - 代码部分：按人汇总提交次数和行数，并说明在做什么（从 issues 字段推断）；该人无提交则不列出
 - 标题用 ### 开头
 - 「流程违规记录」板块必须输出，violations 为空时写「暂无」；非空时按人头统计违规次数，按次数从多到少排列
@@ -310,22 +323,22 @@ _PROMPT_TEMPLATE = """\
 
 **需求动态**
 > 新提出：1 个
-> - [#45 用户中心增加消费记录](https://gitlab.example.com/project/-/issues/45)（提出人：Alice，执行者：张三）
+> - [#45 用户中心增加消费记录](https://gitlab.example.com/project/-/issues/45)（提出人：Alice，提出于：05-18，执行者：张三）
 > 已完成：1 个
-> - [#43 首页改版](https://gitlab.example.com/project/-/issues/43)（执行：张三）
+> - [#43 首页改版](https://gitlab.example.com/project/-/issues/43)（提出人：Bob，提出于：05-10，执行：张三）
 > 进行中：3 个
-> - [#40 支付流程优化](https://gitlab.example.com/project/-/issues/40)（提出人：Carol，执行者：李四）
-> - [#38 用户画像分析](https://gitlab.example.com/project/-/issues/38)（提出人：Dave，执行者：王五）
-> - [#35 消息推送改造](https://gitlab.example.com/project/-/issues/35)（提出人：Eve，待分配）
+> - [#40 支付流程优化](https://gitlab.example.com/project/-/issues/40)（提出人：Carol，提出于：05-12，执行者：李四）
+> - [#38 用户画像分析](https://gitlab.example.com/project/-/issues/38)（提出人：Dave，提出于：05-09，执行者：王五）
+> - [#35 消息推送改造](https://gitlab.example.com/project/-/issues/35)（提出人：Eve，提出于：05-01，待分配）
 
 **Bug 动态**
 > 新提出：1 个
-> - [#46 登录超时](https://gitlab.example.com/project/-/issues/46)（提出人：Bob，待分配）
+> - [#46 登录超时](https://gitlab.example.com/project/-/issues/46)（提出人：Bob，提出于：05-20，待分配）
 > 已修复：0 个
 > 暂无
 > 修复中：2 个
-> - [#42 图片上传失败](https://gitlab.example.com/project/-/issues/42)（提出人：Frank，执行者：张三）
-> - [#39 搜索结果乱序](https://gitlab.example.com/project/-/issues/39)（提出人：Grace，执行者：李四）
+> - [#42 图片上传失败](https://gitlab.example.com/project/-/issues/42)（提出人：Frank，提出于：05-15，执行者：张三）
+> - [#39 搜索结果乱序](https://gitlab.example.com/project/-/issues/39)（提出人：Grace，提出于：05-08，执行者：李四）
 
 **代码提交**
 > 共 12 次提交，+320 / -45 行
@@ -397,13 +410,15 @@ def format_without_llm(data: dict) -> str:
         assignees = "、".join(i.get("assignees") or []) if isinstance(i.get("assignees"), list) else ""
         assignee_str = f"，执行者：{assignees}" if assignees else "，待分配"
         link = f"[#{i['id']} {i['title']}]({i['url']})" if i.get("url") else f"#{i['id']} {i['title']}"
-        return f"> - {link}（提出人：{i['author']}{assignee_str}）"
+        date_str = f"，提出于：{i['created_at']}" if i.get("created_at") else ""
+        return f"> - {link}（提出人：{i['author']}{date_str}{assignee_str}）"
 
     def _closed_line(i: dict) -> str:
         assignees = "、".join(i.get("assignees") or [])
         dev_str = f"执行：{assignees}" if assignees else "执行者未知"
         link = f"[#{i['id']} {i['title']}]({i['url']})" if i.get("url") else f"#{i['id']} {i['title']}"
-        return f"> - {link}（{dev_str}）"
+        date_str = f"，提出于：{i['created_at']}" if i.get("created_at") else ""
+        return f"> - {link}（提出人：{i['author']}{date_str}，{dev_str}）"
 
     new_reqs, new_bugs = _split(new_issues)
     closed_reqs, closed_bugs = _split(closed_issues)
