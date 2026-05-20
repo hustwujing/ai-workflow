@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from .config import Config, load_config
-from .gitlab_api import GitLabAPI, GitLabError, parse_closing_issue_ids
+from .gitlab_api import GitLabAPI, GitLabError
 from .wechat import notify_daily_report, notify_daily_report_image
 from .report_image import PIL_AVAILABLE, render_report
 
@@ -176,24 +176,14 @@ def collect_report_data(
     print("[daily-report] 查询 Issue 分支情况...")
     branched_ids = api.list_issue_branch_ids()
 
-    # --- 查询 pre 分支已合并 MR，识别「待上线」Issue ---
-    print(f"[daily-report] 查询 {cfg.branch_pre} 已合并 MR...")
-    pre_mrs = api.get_merged_mrs(cfg.branch_pre)
-    pre_merged_ids: set[int] = set()
-    for mr in pre_mrs:
-        for iid in parse_closing_issue_ids(mr.get("description", "") or ""):
-            pre_merged_ids.add(iid)
-
-    unstarted_issues = [i for i in all_open if i["id"] not in branched_ids and i["id"] not in pre_merged_ids]
+    unstarted_issues = [i for i in all_open if i["id"] not in branched_ids]
     open_issues      = [i for i in all_open if i["id"] in branched_ids]
-    waiting_issues   = [i for i in all_open if i["id"] not in branched_ids and i["id"] in pre_merged_ids]
 
     # --- 过滤排除的 Issue ---
     if cfg.daily_report_exclude_issues:
         unstarted_issues = [i for i in unstarted_issues if i["id"] not in cfg.daily_report_exclude_issues]
         closed_issues    = [i for i in closed_issues    if i["id"] not in cfg.daily_report_exclude_issues]
         open_issues      = [i for i in open_issues      if i["id"] not in cfg.daily_report_exclude_issues]
-        waiting_issues   = [i for i in waiting_issues   if i["id"] not in cfg.daily_report_exclude_issues]
 
     # --- Commits ---
     print("[daily-report] 拉取提交记录（过滤生成文件后统计行数）...")
@@ -259,7 +249,7 @@ def collect_report_data(
         per_person[name]["commit_titles"].append(c["title"])
 
     # 关联 Issue：从 commit title 里提取 #N 编号，再匹配 Issue 标题
-    issue_map = {str(i["id"]): i["title"] for i in unstarted_issues + closed_issues + open_issues + waiting_issues}
+    issue_map = {str(i["id"]): i["title"] for i in unstarted_issues + closed_issues + open_issues}
     import re
     for name, stat in per_person.items():
         issue_refs: list[str] = []
@@ -288,7 +278,6 @@ def collect_report_data(
         "unstarted_issues": unstarted_issues,
         "closed_issues": closed_issues,
         "open_issues": open_issues,
-        "waiting_issues": waiting_issues,
         "total_commits": len(commits),
         "total_additions": total_additions,
         "total_deletions": total_deletions,
@@ -308,7 +297,7 @@ _PROMPT_TEMPLATE = """\
 - 使用企业微信 Markdown 格式（支持 **加粗**、> 引用、- 列表）
 - 语言精炼，老板能 30 秒读完
 - 需求和 Bug 分两个独立板块，不要混在一起；type 字段为"Bug"的归入 Bug 板块，其余归入需求板块
-- 每个子类别（待认领/进行中/待上线/已完成/已修复/修复中）下必须逐条列出所有 Issue，不能只写数量；数量为 0 时写「暂无」
+- 每个子类别（待认领/已完成/进行中/已修复/修复中）下必须逐条列出所有 Issue，不能只写数量；数量为 0 时写「暂无」
 - 每条 Issue 使用 Markdown 链接格式：[#编号 标题](url)，url 来自数据中的 url 字段
 - 每条 Issue 必须直接使用数据中的 assignees 字段：非空则写"执行者：xxx"，为空列表时才写"待分配"；禁止自行判断或推断执行者
 - 每条 Issue 必须显示 created_at 字段作为提出时间（格式如"提出于：05-20"）
@@ -321,25 +310,22 @@ _PROMPT_TEMPLATE = """\
 
 **需求动态**
 > 待认领：1 个
-> - [#45 用户中心增加消费记录](https://gitlab.example.com/project/-/issues/45)（提出人：Alice，提出于：05-18，待分配）
-> 进行中：2 个
-> - [#40 支付流程优化](https://gitlab.example.com/project/-/issues/40)（提出人：Carol，提出于：05-12，执行者：李四）
-> - [#38 用户画像分析](https://gitlab.example.com/project/-/issues/38)（提出人：Dave，提出于：05-09，执行者：王五）
-> 待上线：1 个
-> - [#35 消息推送改造](https://gitlab.example.com/project/-/issues/35)（提出人：Eve，提出于：05-01，执行者：张三）
+> - [#45 用户中心增加消费记录](https://gitlab.example.com/project/-/issues/45)（提出人：Alice，提出于：05-18，执行者：张三）
 > 已完成：1 个
 > - [#43 首页改版](https://gitlab.example.com/project/-/issues/43)（提出人：Bob，提出于：05-10，执行：张三）
+> 进行中：3 个
+> - [#40 支付流程优化](https://gitlab.example.com/project/-/issues/40)（提出人：Carol，提出于：05-12，执行者：李四）
+> - [#38 用户画像分析](https://gitlab.example.com/project/-/issues/38)（提出人：Dave，提出于：05-09，执行者：王五）
+> - [#35 消息推送改造](https://gitlab.example.com/project/-/issues/35)（提出人：Eve，提出于：05-01，待分配）
 
 **Bug 动态**
 > 待认领：1 个
 > - [#46 登录超时](https://gitlab.example.com/project/-/issues/46)（提出人：Bob，提出于：05-20，待分配）
+> 已修复：0 个
+> 暂无
 > 修复中：2 个
 > - [#42 图片上传失败](https://gitlab.example.com/project/-/issues/42)（提出人：Frank，提出于：05-15，执行者：张三）
 > - [#39 搜索结果乱序](https://gitlab.example.com/project/-/issues/39)（提出人：Grace，提出于：05-08，执行者：李四）
-> 待上线：0 个
-> 暂无
-> 已修复：0 个
-> 暂无
 
 **代码提交**
 > 共 12 次提交，+320 / -45 行
@@ -395,7 +381,6 @@ def format_without_llm(data: dict) -> str:
     unstarted_issues = data["unstarted_issues"]
     closed_issues = data["closed_issues"]
     open_issues = data["open_issues"]
-    waiting_issues = data["waiting_issues"]
     total_commits = data["total_commits"]
     total_additions = data["total_additions"]
     total_deletions = data["total_deletions"]
@@ -425,7 +410,6 @@ def format_without_llm(data: dict) -> str:
     unstarted_reqs, unstarted_bugs = _split(unstarted_issues)
     closed_reqs, closed_bugs = _split(closed_issues)
     open_reqs, open_bugs = _split(open_issues)
-    waiting_reqs, waiting_bugs = _split(waiting_issues)
 
     def _append_section(label: str, items: list[dict], line_fn: Any) -> None:
         lines.append(f"> {label}：{len(items)} 个")
@@ -438,17 +422,15 @@ def format_without_llm(data: dict) -> str:
     # 需求动态
     lines.append("**需求动态**")
     _append_section("待认领", unstarted_reqs, _issue_line)
-    _append_section("进行中", open_reqs, _issue_line)
-    _append_section("待上线", waiting_reqs, _issue_line)
     _append_section("已完成", closed_reqs, _closed_line)
+    _append_section("进行中", open_reqs, _issue_line)
     lines.append("")
 
     # Bug 动态
     lines.append("**Bug 动态**")
     _append_section("待认领", unstarted_bugs, _issue_line)
-    _append_section("修复中", open_bugs, _issue_line)
-    _append_section("待上线", waiting_bugs, _issue_line)
     _append_section("已修复", closed_bugs, _closed_line)
+    _append_section("修复中", open_bugs, _issue_line)
     lines.append("")
 
     # 代码提交
