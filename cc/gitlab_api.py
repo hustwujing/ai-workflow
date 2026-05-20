@@ -81,6 +81,29 @@ class GitLabAPI:
         except GitLabError:
             return None
 
+    def list_issue_branch_ids(self) -> set[int]:
+        """返回所有已有分支（issue_N_* / hotfix_N_*）对应的 issue ID 集合。"""
+        issue_ids: set[int] = set()
+        for prefix in ("issue_", "hotfix_"):
+            page = 1
+            while True:
+                batch = self._request(
+                    "GET",
+                    f"/projects/{self.project_id}/repository/branches",
+                    params={"search": prefix, "per_page": 100, "page": page},
+                )
+                if not batch:
+                    break
+                for b in batch:
+                    name = b.get("name") or ""
+                    m = re.match(r"^(?:issue|hotfix)_(\d+)", name)
+                    if m:
+                        issue_ids.add(int(m.group(1)))
+                if len(batch) < 100:
+                    break
+                page += 1
+        return issue_ids
+
     def get_user_by_username(self, username: str) -> Optional[dict]:
         users = self._request("GET", "/users", params={"username": username})
         return users[0] if users else None
