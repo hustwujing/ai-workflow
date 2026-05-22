@@ -52,11 +52,13 @@ def get_issue_id_from_branch(branch: Optional[str] = None) -> Optional[int]:
 
 def get_branch_type(branch: Optional[str] = None) -> Optional[str]:
     b = branch or get_current_branch()
-    # 支持新格式：feature/, hotfix/
+    # 支持新格式：feature/, hotfix/, quickfix/
     if b.startswith("feature/"):
         return "feature"
     if b.startswith("hotfix/"):
         return "bug"
+    if b.startswith("quickfix/"):
+        return "quickfix"
     # 兼容旧格式：issue_, hotfix_
     if b.startswith("issue_"):
         return "feature"
@@ -145,6 +147,8 @@ def make_branch_name(issue_type: str, issue_id: int, title: str, llm_base_url: s
 
     if issue_type == "feature":
         prefix = "feature"
+    elif issue_type == "quickfix":
+        prefix = "quickfix"
     else:
         prefix = "hotfix"
 

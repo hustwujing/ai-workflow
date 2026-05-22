@@ -141,6 +141,6 @@ def get_last_approval_time(comments: list[dict]) -> Optional[str]:
 
 
 def get_mr_target_branch(branch_name: str, main_branch: str, pre_branch: str) -> str:
-    if branch_name.startswith("hotfix_"):
+    if branch_name.startswith(("hotfix/", "hotfix_", "quickfix/")):
         return main_branch
     return pre_branch

@@ -112,6 +112,36 @@ def notify_hotfix_start(
     send_webhook(webhook_url, content, at_userids=at_userids)
 
 
+def notify_quickfix_start(
+    webhook_url: str,
+    issue_id: int,
+    issue_title: str,
+    branch_name: str,
+    base_branch: str,
+    gitlab_url: str,
+    project_id: str,
+    developer: str,
+    author: str,
+    at_userids: list[str],
+) -> None:
+    issue_link = f"{gitlab_url.rstrip('/')}/{project_id}/-/issues/{issue_id}"
+    content = (
+        f"### ⚡ 快速迭代开始\n"
+        f"> **Issue #{issue_id}**：{issue_title}\n"
+        f"> **提出人**：{author}\n"
+        f"> **开发者**：{developer}\n"
+        f"> **分支**：`{branch_name}`（基于 `{base_branch}`）\n"
+        f"> [查看 Issue]({issue_link})\n\n"
+        f"**下一步 · {developer}**\n"
+        f"> 1. 当前已切换到分支 `{branch_name}`，直接开始开发\n"
+        f"> 2. 完成后提交代码：\n"
+        f">    `ccg gitlab commit \"变更说明\"`\n"
+        f"> 3. 推送分支并创建 MR（直接合入 main）：\n"
+        f">    `ccg gitlab mr create`\n"
+    )
+    send_webhook(webhook_url, content, at_userids=at_userids)
+
+
 def notify_mr_created(
     webhook_url: str,
     issue_id: int,
