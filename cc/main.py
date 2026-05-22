@@ -36,6 +36,7 @@ from .wechat import (
     notify_mr_created,
     notify_mr_merged,
     notify_mr_updated,
+    notify_quickfix_start,
     notify_release,
     notify_release_blocked,
     notify_release_merged,
@@ -78,8 +79,11 @@ def cmd_feature_start(args: argparse.Namespace) -> None:
     if issue_type == "bug":
         print("[错误] 该 Issue 为 Bug 类型，请使用 ccg gitlab hotfix start 创建热修分支", file=sys.stderr)
         sys.exit(1)
+    if issue_type == "quickfix":
+        print("[错误] 该 Issue 为快速迭代类型，请使用 ccg gitlab quickfix start 创建分支", file=sys.stderr)
+        sys.exit(1)
     if issue_type is None:
-        print("[错误] 无法识别 Issue 类型，请确认 description 是否使用了标准模板（需求/优化/Bug）", file=sys.stderr)
+        print("[错误] 无法识别 Issue 类型，请确认 description 是否使用了标准模板（需求/优化/Bug/快速迭代）", file=sys.stderr)
         sys.exit(1)
 
     missing = get_missing_sections(body, issue_type)
@@ -207,6 +211,80 @@ def cmd_hotfix_start(args: argparse.Namespace) -> None:
     author_name: str = author.get("name", "") or author_username
     at_userids = cfg.resolve_wechat_ids([author_username, cfg.gitlab_username]) + cfg.at_tl_list
     notify_hotfix_start(
+        cfg.wechat_webhook_url,
+        issue_id=issue_id,
+        issue_title=title,
+        branch_name=branch_name,
+        base_branch=base_branch,
+        gitlab_url=cfg.gitlab_url,
+        project_id=cfg.gitlab_project_id,
+        developer=cfg.gitlab_username,
+        author=author_name,
+        at_userids=at_userids,
+    )
+
+
+def cmd_quickfix_start(args: argparse.Namespace) -> None:
+    cfg = load_config()
+    api = GitLabAPI(cfg)
+
+    issue_id = int(args.issue_id)
+    print(f"[gitlab] 获取 Issue #{issue_id}...")
+    try:
+        issue = api.get_issue(issue_id)
+    except GitLabError as e:
+        print(f"[错误] {_friendly_issue_error(e, issue_id)}", file=sys.stderr)
+        sys.exit(1)
+
+    title: str = issue.get("title", "")
+    body: str = issue.get("description", "") or ""
+
+    missing = get_missing_sections(body, "quickfix")
+    if not (issue.get("assignees") or issue.get("assignee")):
+        missing.append("负责人（指派研发）")
+    if missing:
+        print(f"[错误] Issue格式不合规，缺少：{', '.join(missing)}", file=sys.stderr)
+        author = issue.get("author", {})
+        author_username: str = author.get("username", "")
+        author_name: str = author.get("name", "") or author_username
+        issue_link = f"{cfg.gitlab_url.rstrip('/')}/{cfg.gitlab_project_id}/-/issues/{issue_id}"
+        notify_issue_invalid(
+            cfg.wechat_webhook_url,
+            issue_id=issue_id,
+            issue_title=title,
+            issue_link=issue_link,
+            author=author_name,
+            developer=cfg.gitlab_username,
+            missing_sections=missing,
+            at_userids=cfg.resolve_wechat_ids([author_username]),
+            issue_type="quickfix",
+        )
+        sys.exit(1)
+
+    branch_name = make_branch_name(
+        "quickfix",
+        issue_id,
+        title.replace("【快速迭代】", "").strip(),
+        llm_base_url=cfg.llm_base_url,
+        llm_api_key=cfg.llm_api_key,
+        llm_model=cfg.llm_model,
+    )
+    base_branch = args.base or cfg.branch_main
+
+    try:
+        checkout_and_pull_main(base_branch)
+        create_local_branch(branch_name)
+    except BranchError as e:
+        print(f"[错误] {e}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"\n[成功] 已创建快速迭代分支：{branch_name}（基于 {base_branch}）")
+
+    author = issue.get("author", {})
+    author_username: str = author.get("username", "")
+    author_name: str = author.get("name", "") or author_username
+    at_userids = cfg.resolve_wechat_ids([author_username, cfg.gitlab_username])
+    notify_quickfix_start(
         cfg.wechat_webhook_url,
         issue_id=issue_id,
         issue_title=title,
@@ -424,7 +502,8 @@ def cmd_mr_create(args: argparse.Namespace) -> None:
         commits=commits,
     )
 
-    mr_title = f"[{'需求' if branch_type == 'feature' else 'Bug热修'}] #{issue_id} {issue_title}"
+    mr_type_label = {"feature": "需求", "quickfix": "快速迭代", "bug": "Bug热修"}.get(branch_type, "需求")
+    mr_title = f"[{mr_type_label}] #{issue_id} {issue_title}"
 
     assignee_id: Optional[int] = None
     user_info = api.get_user_by_username(cfg.gitlab_username)
@@ -1116,6 +1195,14 @@ def _build_parser() -> argparse.ArgumentParser:
     hotfix_start.add_argument("issue_id", help="GitLab Issue ID")
     hotfix_start.add_argument("--base", default=None, metavar="BRANCH", help="基准分支，默认为 main")
     hotfix_start.set_defaults(func=cmd_hotfix_start)
+
+    # ccg gitlab quickfix ...
+    quickfix_parser = gitlab_sub.add_parser("quickfix", help="快速迭代分支管理（直接合入 main）")
+    quickfix_sub = quickfix_parser.add_subparsers(dest="action")
+    quickfix_start = quickfix_sub.add_parser("start", help="拉取快速迭代分支（自动校验 Issue）")
+    quickfix_start.add_argument("issue_id", help="GitLab Issue ID")
+    quickfix_start.add_argument("--base", default=None, metavar="BRANCH", help="基准分支，默认为 main")
+    quickfix_start.set_defaults(func=cmd_quickfix_start)
 
     # ccg gitlab commit ...
     commit_parser = gitlab_sub.add_parser("commit", help="规范提交代码")
