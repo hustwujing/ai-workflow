@@ -41,7 +41,7 @@ def get_issue_id_from_branch(branch: Optional[str] = None) -> Optional[int]:
     b = branch or get_current_branch()
     # 支持新格式：feature/123-desc, hotfix/456-desc
     # 兼容旧格式：issue_123, hotfix_456
-    m = re.match(r"^(?:feature|hotfix)/(\d+)", b)
+    m = re.match(r"^(?:feature|hotfix|quickfix)/(\d+)", b)
     if m:
         return int(m.group(1))
     m = re.match(r"^(?:issue|hotfix)_(\d+)", b)
